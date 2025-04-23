@@ -96,6 +96,13 @@ with tabs[4]:
     st.header("Library Catalog")
     edited = st.data_editor(catalog_df, num_rows="dynamic")
     if st.button("Save catalog"):
-        sheet.clear()
-        sheet.update([edited.columns.tolist()] + edited.values.tolist())
-        st.success("Catalog updated!")
+    st.write("Saving…")
+        try:
+            sheet.clear()
+            sheet.update([edited.columns.tolist()] + edited.values.tolist())
+            st.success("Catalog updated!")
+        except Exception as e:
+            st.error(f"Save failed: {e}")
+
+
+
