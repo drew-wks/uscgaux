@@ -17,6 +17,10 @@ sheet = sheets.open_by_key(LIBRARY_CATALOG_ID).sheet1
 records = sheet.get_all_records()
 catalog_df = pd.DataFrame(records)
 
+PDF_LIVE_FOLDER_ID = "1-vyQQp30mKzudkTOk7YJLmmVDirBOIpg"
+PDF_BACKLOG_FOLDER_ID = "1993TlUkd9_4XqWCutyY5oNTpmBdnxefc"
+PDF_DELETED_FOLDER_ID = "1FYUFxenYC6nWomzgv6j1O4394Zv6Bs5F"
+
 # ——————————————————————————————
 # 4) Build the Admin UI
 st.title("ASK Admin Console")
@@ -32,22 +36,40 @@ tabs = st.tabs([
 # — Browse Drive Tab —
 with tabs[0]:
     st.header("Browse Raw PDFs in Drive")
-    folder_id = "1993TlUkd9_4XqWCutyY5oNTpmBdnxefc"
-    
-    if st.button("List files"):
+
+    with st.spinner("Loading PDF list…"):
         try:
-            resp = drive.files().list(
-                q=f"'{folder_id}' in parents and trashed=false",
-                fields="files(id, name)"
-            ).execute()
-            files = resp.get("files", [])
-            if not files:
-                st.info("No files found.")
+            all_pdfs = []
+            page_token = None
+            while True:
+                resp = drive.files().list(
+                    q=(
+                        f"'{PDF_LIVE_FOLDER_ID}' in parents "
+                        "and trashed=false "
+                        "and mimeType='application/pdf'"
+                    ),
+                    fields="nextPageToken, files(id, name)",
+                    pageSize=100,
+                    pageToken=page_token,
+                ).execute()
+                files = resp.get("files", [])
+                all_pdfs.extend(files)
+                page_token = resp.get("nextPageToken")
+                if not page_token:
+                    break
+
+            if not all_pdfs:
+                st.info("No PDFs found in the specified folder.")
             else:
-                for f in files:
-                    st.write(f"{f['name']}  →  {f['id']}")
+                st.success(f"Found {len(all_pdfs)} PDF(s):")
+                for f in all_pdfs:
+                    url = f"https://drive.google.com/file/d/{f['id']}/view"
+                    st.markdown(f"- [{f['name']}]({url})")
+
         except Exception as e:
-            st.error(f"Error listing files: {e}")
+            st.error(f"Error fetching PDFs: {e}")
+
+
 
 # — Add Docs Tab —
 with tabs[1]:
