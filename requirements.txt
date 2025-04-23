@@ -2,5 +2,6 @@ streamlit
 pandas>=2.0.0
 gspread>=5.8.3
 google-auth
+google-api-python-client
 PyYAML
 streamlit-authenticator
