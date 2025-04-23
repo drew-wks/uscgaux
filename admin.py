@@ -26,25 +26,48 @@ PDF_DELETED_FOLDER_ID = "1FYUFxenYC6nWomzgv6j1O4394Zv6Bs5F"
 # Helper for Tab 0
 def display_pdf_table(df: pd.DataFrame, height: int = 400):
     """Render a sortable, filterable AgGrid table of PDFs with clickable URLs."""
-    # JS to render a clickable <a> tag
+
+    # 1) Define a proper cell-renderer class that creates an <a> element
     link_renderer = JsCode("""
-    function(params) {
-        return `<a href="${params.value}" target="_blank">${params.value}</a>`;
+    class LinkCellRenderer {
+      init(params) {
+        // create an anchor element
+        this.eGui = document.createElement('a');
+        this.eGui.href = params.value;
+        this.eGui.target = "_blank";
+        this.eGui.innerText = params.value;
+        this.eGui.style.textDecoration = 'none';
+      }
+      // called by ag-grid to get the HTML element
+      getGui() {
+        return this.eGui;
+      }
     }
     """)
+
+    # 2) Build the grid options
     gb = GridOptionsBuilder.from_dataframe(df)
-    gb.configure_column("URL", cellRenderer=link_renderer, headerName="Link")
-    gb.configure_default_column(sortable=True, filter=True, resizable=True)
+    gb.configure_column(
+        "URL",
+        headerName="Link",
+        cellRenderer=link_renderer,
+    )
+    gb.configure_default_column(
+        sortable=True,
+        filter=True,
+        resizable=True,
+    )
     grid_opts = gb.build()
 
+    # 3) Render with unsafe JS enabled
     AgGrid(
         df,
         gridOptions=grid_opts,
+        allow_unsafe_jscode=True,
         enable_enterprise_modules=False,
         fit_columns_on_grid_load=True,
         height=height,
         reload_data=False,
-        allow_unsafe_jscode=True,
     )
 
 
