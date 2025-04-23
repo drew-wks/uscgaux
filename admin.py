@@ -61,7 +61,7 @@ with tabs[0]:
             if not all_pdfs:
                 st.info("No PDFs found in the specified folder.")
             else:
-                st.success(f"Found {len(all_pdfs)} PDF(s):")
+                st.success(f"yeah Found {len(all_pdfs)} PDF(s):")
                 for f in all_pdfs:
                     url = f"https://drive.google.com/file/d/{f['id']}/view"
                     st.markdown(f"[{f['name']}]({url})")
