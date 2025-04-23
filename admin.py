@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
 from google_core import init_auth, get_gcp_clients, fetch_pdfs
+import ui_utils as ui
 
 # ——————————————————————————————
 # 1) Enforce login & greeting
@@ -40,6 +41,8 @@ def display_pdf_table(df: pd.DataFrame):
 # ——————————————————————————————
 # 4) Build the Admin UI
 st.title("ASK Admin Console")
+
+ui.apply_styles()
 
 tabs = st.tabs([
     "Inspect PDFs",
