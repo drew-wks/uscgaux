@@ -1,61 +1,99 @@
 import streamlit as st
 import pandas as pd
-import gspread
-from google.oauth2.service_account import Credentials
-from streamlit_authenticator import Authenticate
+from core import init_auth, get_gcp_clients
 
 # ——————————————————————————————
-# 1) Build the authenticator from Streamlit Secrets
-authenticator = Authenticate(
-    credentials=st.secrets["credentials"],
-    cookie_name=st.secrets["cookie"]["name"],
-    key=st.secrets["cookie"]["key"],
-    expiry_days=st.secrets["cookie"]["expiry_days"],
-    preauthorized=st.secrets["credentials"].get("preauthorized", {}),
-)
+# 1) Enforce login & greeting
+init_auth()
 
 # ——————————————————————————————
-# 2) Require Google login before rendering anything else
-if not st.session_state.get("name"):
-    try:
-        authenticator.experimental_guest_login(
-            button_name="🔒 Login with Google",
-            provider="google",
-            oauth2=st.secrets["oauth2"],
-            location="main",
-        )
-    except Exception as e:
-        st.error(f"Authentication error: {e}")
-    st.stop()
-
-st.sidebar.write(f"👤 Hello, {st.session_state['name']}")
+# 2) Instantiate Google Sheets & Drive clients
+sheets, drive = get_gcp_clients()
 
 # ——————————————————————————————
-# 3) Google Sheets authorization via google-auth (service account in secrets)
-scopes = [
-    "https://spreadsheets.google.com/feeds",
-    "https://www.googleapis.com/auth/drive",
-]
-creds = Credentials.from_service_account_info(
-    st.secrets["gcp_service_account"],
-    scopes=scopes
-)
-gc = gspread.authorize(creds)
-
-# ——————————————————————————————
-# 4) Load the catalog sheet into a DataFrame
-sheet = gc.open("ASK Library Catalog").sheet1
+# 3) Load the catalog DataFrame once
+sheet = sheets.open("ASK Library Catalog").sheet1
 records = sheet.get_all_records()
-df = pd.DataFrame(records)
+catalog_df = pd.DataFrame(records)
 
 # ——————————————————————————————
-# 5) Build the admin UI with tabs
+# 4) Build the Admin UI
 st.title("ASK Admin Console")
-tabs = st.tabs(["Add Docs", "Delete Docs", "Reports", "Catalog"])
 
+tabs = st.tabs([
+    "Browse Drive",
+    "Add Docs",
+    "Delete Docs",
+    "Reports",
+    "Catalog",
+])
+
+# — Browse Drive Tab —
+with tabs[0]:
+    st.header("Browse Raw PDFs in Drive")
+    folder_id = st.text_input(
+        "Drive Folder ID",
+        value="",
+        help="Paste the Google Drive folder ID where raw PDFs are stored",
+    )
+    if st.button("List files"):
+        try:
+            resp = drive.files().list(
+                q=f"'{folder_id}' in parents and trashed=false",
+                fields="files(id, name)"
+            ).execute()
+            files = resp.get("files", [])
+            if not files:
+                st.info("No files found.")
+            else:
+                for f in files:
+                    st.write(f"{f['name']}  →  {f['id']}")
+        except Exception as e:
+            st.error(f"Error listing files: {e}")
+
+# — Add Docs Tab —
+with tabs[1]:
+    st.header("Add Documents")
+    st.info("Upload your PDFs and enter metadata below")
+    uploaded = st.file_uploader("Choose PDF file", type="pdf", accept_multiple_files=False)
+    if uploaded:
+        st.write("Filename:", uploaded.name)
+        # TODO: extract basic info (e.g. page count) and show form fields
+    metadata = {
+        "title": st.text_input("Title"),
+        "organization": st.text_input("Organization"),
+        "scope": st.text_input("Scope"),
+        "unit": st.text_input("Unit"),
+        "issue_date": st.date_input("Issue Date"),
+        "expiration_date": st.date_input("Expiration Date"),
+        "public_release": st.checkbox("Public Release"),
+    }
+    if st.button("Generate UUID & Add to Qdrant"):
+        # TODO: call your add-doc logic here, passing `uploaded` and `metadata`
+        st.success("Document added (placeholder)")
+
+# — Delete Docs Tab —
+with tabs[2]:
+    st.header("Delete Documents")
+    delete_id = st.text_input("UUID to delete", help="Enter the document's UUID")
+    if st.button("Delete from Qdrant"):
+        # TODO: call your delete-doc logic here using delete_id
+        st.success(f"Deleted document {delete_id} (placeholder)")
+
+# — Reports Tab —
 with tabs[3]:
+    st.header("Generate Report")
+    st.info("Select filters and click to refresh the report CSV")
+    filter_scope = st.text_input("Scope filter (leave blank for all)")
+    filter_unit = st.text_input("Unit filter (leave blank for all)")
+    if st.button("Create & Download Report"):
+        # TODO: invoke your report-generation function with the filters
+        st.success("Report created at `docs_report_qdrant_cloud{date}.csv` (placeholder)")
+
+# — Catalog Tab —
+with tabs[4]:
     st.header("Library Catalog")
-    edited = st.experimental_data_editor(df, num_rows="dynamic")
+    edited = st.experimental_data_editor(catalog_df, num_rows="dynamic")
     if st.button("Save catalog"):
         sheet.clear()
         sheet.update([edited.columns.tolist()] + edited.values.tolist())
