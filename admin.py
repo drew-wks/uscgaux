@@ -94,7 +94,7 @@ with tabs[3]:
 # — Catalog Tab —
 with tabs[4]:
     st.header("Library Catalog")
-    edited = st.experimental_data_editor(catalog_df, num_rows="dynamic")
+    edited = st.data_editor(catalog_df, num_rows="dynamic")
     if st.button("Save catalog"):
         sheet.clear()
         sheet.update([edited.columns.tolist()] + edited.values.tolist())
