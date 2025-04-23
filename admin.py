@@ -12,7 +12,8 @@ sheets, drive = get_gcp_clients()
 
 # ——————————————————————————————
 # 3) Load the catalog DataFrame once
-sheet = sheets.open("ASK Library Catalog").sheet1
+LIBRARY_CATALOG_ID = "16F5tRIvuHncofRuXCsQ20A7utZWRuEgA2bvj4nQQjek"
+sheet = sheets.open("LIBRARY_CATALOG_ID").sheet1
 records = sheet.get_all_records()
 catalog_df = pd.DataFrame(records)
 
