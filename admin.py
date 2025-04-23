@@ -24,52 +24,18 @@ PDF_DELETED_FOLDER_ID = "1FYUFxenYC6nWomzgv6j1O4394Zv6Bs5F"
 
 
 # Helper for Tab 0
-def display_pdf_table(df: pd.DataFrame, height: int = 400):
-    """Render a sortable, filterable AgGrid table of PDFs with clickable URLs."""
-
-    # 1) Define a proper cell-renderer class that creates an <a> element
-    link_renderer = JsCode("""
-    class LinkCellRenderer {
-      init(params) {
-        // create an anchor element
-        this.eGui = document.createElement('a');
-        this.eGui.href = params.value;
-        this.eGui.target = "_blank";
-        this.eGui.innerText = params.value;
-        this.eGui.style.textDecoration = 'none';
-      }
-      // called by ag-grid to get the HTML element
-      getGui() {
-        return this.eGui;
-      }
-    }
-    """)
-
-    # 2) Build the grid options
-    gb = GridOptionsBuilder.from_dataframe(df)
-    gb.configure_column(
-        "URL",
-        headerName="Link",
-        cellRenderer=link_renderer,
-    )
-    gb.configure_default_column(
-        sortable=True,
-        filter=True,
-        resizable=True,
-    )
-    grid_opts = gb.build()
-
-    # 3) Render with unsafe JS enabled
-    AgGrid(
+def display_pdf_table(df: pd.DataFrame):
+    """Render a sortable DataFrame with clickable URL links."""
+    st.dataframe(
         df,
-        gridOptions=grid_opts,
-        allow_unsafe_jscode=True,
-        enable_enterprise_modules=False,
-        fit_columns_on_grid_load=True,
-        height=height,
-        reload_data=False,
+        column_config={
+            "URL": st.column_config.LinkColumn(
+                "Link",
+                help="Click to open the PDF in Drive"
+            )
+        },
+        use_container_width=True,
     )
-
 
 # ——————————————————————————————
 # 4) Build the Admin UI
@@ -85,7 +51,6 @@ tabs = st.tabs([
 
 # — Browse Drive Tab —
 with tabs[0]:
-    st.header("Inspect the source PDFs in Drive")
 
     with st.spinner("Loading PDF list…"):
         try:
