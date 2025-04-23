@@ -1,7 +1,8 @@
 import streamlit as st
+st.set_page_config(page_title="ASK Auxiliary Source of Knowledge", initial_sidebar_state="collapsed")
 import pandas as pd
 from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
-from google_core import init_auth, get_gcp_clients, fetch_pdfs
+from google_utils import init_auth, get_gcp_clients, fetch_pdfs
 import ui_utils as ui
 
 # ——————————————————————————————
@@ -47,7 +48,7 @@ tabs = st.tabs([
     "Inspect PDFs",
     "Add PDFs",
     "Delete PDFs",
-    "Reports",
+    "DB Report",
     "Catalog",
 ])
 
@@ -101,7 +102,6 @@ with tabs[2]:
 
 # — Reports Tab —
 with tabs[3]:
-    st.header("Generate Report")
     df, last_update_date = ui.get_library_catalog_excel_and_date()
     try:
         num_items = len(df)
