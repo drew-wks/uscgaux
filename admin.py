@@ -1,31 +1,27 @@
 import streamlit as st
 import pandas as pd
-import yaml
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 from streamlit_authenticator import Authenticate
 
 # ——————————————————————————————
-# 1) Load your OAuth & cookie config for streamlit-authenticator
-with open("config.yaml") as f:
-    config = yaml.safe_load(f)
-
+# 1) Build the authenticator from Streamlit Secrets
 authenticator = Authenticate(
-    credentials=config["credentials"],
-    cookie_name=config["cookie"]["name"],
-    key=config["cookie"]["key"],
-    expiry_days=config["cookie"]["expiry_days"],
-    preauthorized=config.get("preauthorized", {}),
+    credentials=st.secrets["credentials"],
+    cookie_name=st.secrets["cookie"]["name"],
+    key=st.secrets["cookie"]["key"],
+    expiry_days=st.secrets["cookie"]["expiry_days"],
+    preauthorized=st.secrets["credentials"].get("preauthorized", {}),
 )
 
 # ——————————————————————————————
-# 2) Require Google login before anything else
+# 2) Require Google login before rendering anything else
 if not st.session_state.get("name"):
     try:
         authenticator.experimental_guest_login(
             button_name="🔒 Login with Google",
             provider="google",
-            oauth2=config["oauth2"],
+            oauth2=st.secrets["oauth2"],
             location="main",
         )
     except Exception as e:
@@ -35,14 +31,14 @@ if not st.session_state.get("name"):
 st.sidebar.write(f"👤 Hello, {st.session_state['name']}")
 
 # ——————————————————————————————
-# 3) Google Sheets authorization (store service-account JSON in Streamlit Secrets)
-scope = [
+# 3) Google Sheets authorization via google-auth (service account in secrets)
+scopes = [
     "https://spreadsheets.google.com/feeds",
     "https://www.googleapis.com/auth/drive",
 ]
-creds = ServiceAccountCredentials.from_json_keyfile_dict(
+creds = Credentials.from_service_account_info(
     st.secrets["gcp_service_account"],
-    scope
+    scopes=scopes
 )
 gc = gspread.authorize(creds)
 
@@ -50,7 +46,7 @@ gc = gspread.authorize(creds)
 # 4) Load the catalog sheet into a DataFrame
 sheet = gc.open("ASK Library Catalog").sheet1
 records = sheet.get_all_records()
-df = pd.DataFrame.from_records(records)
+df = pd.DataFrame(records)
 
 # ——————————————————————————————
 # 5) Build the admin UI with tabs
