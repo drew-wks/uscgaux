@@ -26,7 +26,7 @@ PDF_DELETED_FOLDER_ID = "1FYUFxenYC6nWomzgv6j1O4394Zv6Bs5F"
 st.title("ASK Admin Console")
 
 tabs = st.tabs([
-    "Browse PDFs",
+    "Inspect PDFs",
     "Add PDFs",
     "Delete PDFs",
     "Reports",
@@ -35,9 +35,9 @@ tabs = st.tabs([
 
 # — Browse Drive Tab —
 with tabs[0]:
-    st.header("Browse Raw PDFs in Drive")
+    st.header("Inspect the source PDFs in Drive")
 
-    with st.spinner("Loading PDF list…"):
+    with st.spinner("Loading PDF…"):
         try:
             all_pdfs = []
             page_token = None
@@ -64,7 +64,7 @@ with tabs[0]:
                 st.success(f"Found {len(all_pdfs)} PDF(s):")
                 for f in all_pdfs:
                     url = f"https://drive.google.com/file/d/{f['id']}/view"
-                    st.markdown(f"- [{f['name']}]({url})")
+                    st.markdown(f"[{f['name']}]({url})")
 
         except Exception as e:
             st.error(f"Error fetching PDFs: {e}")
