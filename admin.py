@@ -37,7 +37,7 @@ tabs = st.tabs([
 with tabs[0]:
     st.header("Inspect the source PDFs in Drive")
 
-    with st.spinner("Loading PDF…"):
+    with st.spinner("Loading PDF list…"):
         try:
             all_pdfs = []
             page_token = None
@@ -61,13 +61,25 @@ with tabs[0]:
             if not all_pdfs:
                 st.info("No PDFs found in the specified folder.")
             else:
-                st.success(f"yeah Found {len(all_pdfs)} PDF(s):")
-                for f in all_pdfs:
-                    url = f"https://drive.google.com/file/d/{f['id']}/view"
-                    st.markdown(f"[{f['name']}]({url})")
+                # Build a DataFrame for display
+                df_pdfs = (
+                    pd.DataFrame(all_pdfs)
+                      .rename(columns={"name": "Name", "id": "ID"})
+                )
+                df_pdfs["URL"] = df_pdfs["ID"].apply(
+                    lambda x: f"https://drive.google.com/file/d/{x}/view"
+                )
 
+                # Show it in a read-only data editor so you can sort by Name or URL
+                st.data_editor(
+                    df_pdfs[["Name", "URL"]],
+                    disabled=True,           # make it read-only
+                    hide_index=True,
+                    use_container_width=True
+                )
         except Exception as e:
             st.error(f"Error fetching PDFs: {e}")
+
 
 
 
