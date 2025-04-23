@@ -20,7 +20,7 @@ def init_auth():
 
     # 2) Pull cookie settings & OAuth2 config from st.secrets
     cookie_conf = st.secrets.get("cookie", {})
-    oauth2_conf = {"google": st.secrets.get("oauth2", {})}
+    oauth2_conf = st.secrets["oauth2"]
 
     auth = Authenticate(
         credentials=credentials_conf,
