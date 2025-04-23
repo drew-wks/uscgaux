@@ -1,17 +1,17 @@
 import streamlit as st
 import pandas as pd
-from google_core import init_auth, get_gcp_clients
+from google_core import init_auth, get_gcp_clients, fetch_pdfs
 
 # ——————————————————————————————
 # 1) Enforce login & greeting
 init_auth()
 
 # ——————————————————————————————
-# 2) Instantiate Google Sheets & Drive clients
+# Instantiates Google Sheets & Drive clients
 sheets, drive = get_gcp_clients()
 
 # ——————————————————————————————
-# 3) Load the catalog DataFrame once
+# Loads the catalog DataFrame once
 LIBRARY_CATALOG_ID = "16F5tRIvuHncofRuXCsQ20A7utZWRuEgA2bvj4nQQjek"
 sheet = sheets.open_by_key(LIBRARY_CATALOG_ID).sheet1
 records = sheet.get_all_records()
@@ -20,6 +20,31 @@ catalog_df = pd.DataFrame(records)
 PDF_LIVE_FOLDER_ID = "1-vyQQp30mKzudkTOk7YJLmmVDirBOIpg"
 PDF_BACKLOG_FOLDER_ID = "1993TlUkd9_4XqWCutyY5oNTpmBdnxefc"
 PDF_DELETED_FOLDER_ID = "1FYUFxenYC6nWomzgv6j1O4394Zv6Bs5F"
+
+
+# Helper for Tab 0
+def display_pdf_table(df: pd.DataFrame, height: int = 400):
+    """Render a sortable, filterable AgGrid table of PDFs with clickable URLs."""
+    # JS to render a clickable <a> tag
+    link_renderer = JsCode("""
+    function(params) {
+        return `<a href="${params.value}" target="_blank">${params.value}</a>`;
+    }
+    """)
+    gb = GridOptionsBuilder.from_dataframe(df)
+    gb.configure_column("URL", cellRenderer=link_renderer, headerName="Link")
+    gb.configure_default_column(sortable=True, filter=True, resizable=True)
+    grid_opts = gb.build()
+
+    AgGrid(
+        df,
+        gridOptions=grid_opts,
+        enable_enterprise_modules=False,
+        fit_columns_on_grid_load=True,
+        height=height,
+        reload_data=False,
+    )
+
 
 # ——————————————————————————————
 # 4) Build the Admin UI
@@ -39,47 +64,17 @@ with tabs[0]:
 
     with st.spinner("Loading PDF list…"):
         try:
-            all_pdfs = []
-            page_token = None
-            while True:
-                resp = drive.files().list(
-                    q=(
-                        f"'{PDF_LIVE_FOLDER_ID}' in parents "
-                        "and trashed=false "
-                        "and mimeType='application/pdf'"
-                    ),
-                    fields="nextPageToken, files(id, name)",
-                    pageSize=100,
-                    pageToken=page_token,
-                ).execute()
-                files = resp.get("files", [])
-                all_pdfs.extend(files)
-                page_token = resp.get("nextPageToken")
-                if not page_token:
-                    break
+            df_pdfs = fetch_pdfs(drive, PDF_LIVE_FOLDER_ID)
 
-            if not all_pdfs:
+            if df_pdfs.empty:
                 st.info("No PDFs found in the specified folder.")
             else:
-                # Build a DataFrame for display
-                df_pdfs = (
-                    pd.DataFrame(all_pdfs)
-                      .rename(columns={"name": "Name", "id": "ID"})
-                )
-                df_pdfs["URL"] = df_pdfs["ID"].apply(
-                    lambda x: f"https://drive.google.com/file/d/{x}/view"
-                )
+                st.success(f"Found {len(df_pdfs)} PDF(s):")
+                # only show Name + URL in the grid
+                display_pdf_table(df_pdfs[["Name", "URL"]])
 
-                # Show it in a read-only data editor so you can sort by Name or URL
-                st.data_editor(
-                    df_pdfs[["Name", "URL"]],
-                    disabled=True,           # make it read-only
-                    hide_index=True,
-                    use_container_width=True
-                )
         except Exception as e:
-            st.error(f"Error fetching PDFs: {e}")
-
+            st.error(f"Error while fetching PDFs: {e}")
 
 
 
