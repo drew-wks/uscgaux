@@ -149,7 +149,7 @@ def get_library_catalog_excel_and_date():
         return None, None
 
     # Use fnmatch for filename matching
-    excel_files = [file for file in files_in_directory if fnmatch(file, "docs_report_qdrant_cloud*.xlsx")]
+    excel_files = [file for file in catalog_dir if fnmatch(file, "docs_report_qdrant_cloud*.xlsx")]
     if not excel_files:
         os.write(1, b"There is no matching Excel file in the directory.\n")
         return None, None
