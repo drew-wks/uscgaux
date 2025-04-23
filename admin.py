@@ -44,6 +44,7 @@ def display_pdf_table(df: pd.DataFrame, height: int = 400):
         fit_columns_on_grid_load=True,
         height=height,
         reload_data=False,
+        allow_unsafe_jscode=True,
     )
 
 
