@@ -26,7 +26,7 @@ def init_auth():
         cookie_name=st.secrets.get["cookie"]["name"],
         key=st.secrets.get["cookie"]["key"],
         expiry_days=st.secrets.get["cookie"]["expiry_days"],
-        preauthorized=credentials_conf("preauthorized"],
+        preauthorized=credentials_conf["preauthorized"],
     )
     if not st.session_state.get("name"):
         auth.experimental_guest_login(
