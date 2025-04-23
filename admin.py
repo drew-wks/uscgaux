@@ -3,7 +3,7 @@ st.set_page_config(page_title="ASK Auxiliary Source of Knowledge", initial_sideb
 import pandas as pd
 from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
 from google_utils import init_auth, get_gcp_clients, fetch_pdfs
-import ui_utils as ui
+import ui_utils
 
 # ——————————————————————————————
 # 1) Enforce login & greeting
@@ -42,7 +42,7 @@ def display_pdf_table(df: pd.DataFrame):
 # ——————————————————————————————
 # 4) Build the Admin UI
 
-ui.apply_styles()
+ui_utils.apply_styles()
 
 tabs = st.tabs([
     "Inspect PDFs",
@@ -102,7 +102,7 @@ with tabs[2]:
 
 # — Reports Tab —
 with tabs[3]:
-    df, last_update_date = ui.get_library_catalog_excel_and_date()
+    df, last_update_date = ui_utils.get_library_catalog_excel_and_date()
     try:
         num_items = len(df)
         st.markdown(f"{num_items} items. Last update: {last_update_date}")  

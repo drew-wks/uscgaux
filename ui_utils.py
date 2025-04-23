@@ -130,13 +130,22 @@ def get_library_catalog_excel_and_date():
         the timestamp from the filename as a string in the format 'YYYY-MM-DDTHH:MM:SSZ'.
         Returns (None, None) if no matching file is found or if an error occurs.
     """
-    # defined here becuase function is accessed in several places. Use full path
-    directory_path = './docs/library_catalog/'
-    
-    try:
-        files_in_directory = os.listdir(directory_path)
-    except FileNotFoundError:
-        os.write(1, b"Directory not found.\n")
+# Start from the folder containing this script
+    current = Path(__file__).resolve().parent
+
+    catalog_dir = None
+    # Climb up until root
+    while True:
+        candidate = current / "docs" / "library_catalog"
+        if candidate.is_dir():
+            catalog_dir = candidate
+            break
+        if current.parent == current:  # reached filesystem root
+            break
+        current = current.parent
+
+    if catalog_dir is None:
+        st.error(f"Could not find a 'docs/library_catalog' directory anywhere above {Path(__file__)}")
         return None, None
 
     # Use fnmatch for filename matching
