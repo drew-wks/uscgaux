@@ -22,9 +22,9 @@ catalog_df = pd.DataFrame(records)
 st.title("ASK Admin Console")
 
 tabs = st.tabs([
-    "Browse Drive",
-    "Add Docs",
-    "Delete Docs",
+    "Browse PDFs",
+    "Add PDFs",
+    "Delete PDFs",
     "Reports",
     "Catalog",
 ])
@@ -32,11 +32,8 @@ tabs = st.tabs([
 # — Browse Drive Tab —
 with tabs[0]:
     st.header("Browse Raw PDFs in Drive")
-    folder_id = st.text_input(
-        "Drive Folder ID",
-        value="",
-        help="Paste the Google Drive folder ID where raw PDFs are stored",
-    )
+    folder_id = "1993TlUkd9_4XqWCutyY5oNTpmBdnxefc"
+    
     if st.button("List files"):
         try:
             resp = drive.files().list(
