@@ -54,20 +54,19 @@ tabs = st.tabs([
 
 # — Browse Drive Tab —
 with tabs[0]:
+    pdf_container = st.empty()
 
-    with st.spinner("Loading PDF list…"):
-        try:
-            df_pdfs = fetch_pdfs(drive, PDF_LIVE_FOLDER_ID)
+    with pdf_container.spinner("Loading PDF list…"):
+        df_pdfs = fetch_pdfs(drive, PDF_LIVE_FOLDER_ID)
 
-            if df_pdfs.empty:
+        with pdf_container:
+            if df_pdfs is None:
+                st.error("Failed to fetch the PDF list.")
+            elif df_pdfs.empty:
                 st.info("No PDFs found in the specified folder.")
             else:
                 st.success(f"Found {len(df_pdfs)} PDF(s):")
-                # only show Name + URL in the grid
                 display_pdf_table(df_pdfs[["Name", "URL"]])
-
-        except Exception as e:
-            st.error(f"Error while fetching PDFs: {e}")
 
 
 
