@@ -118,6 +118,27 @@ def get_markdown(markdown_file):
     return Path(markdown_file).read_text()
 
 
+def find_catalog_directory() -> str | None:
+    """
+    Attempts to locate the 'docs/library_catalog' directory either
+    adjacent to this script or one level up. Returns the absolute
+    path if found, otherwise None.
+    """
+    # level-0: next to this file
+    dir1 = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "docs", "library_catalog"
+    )
+    # level-1: one up from parent_dir
+    dir2 = os.path.join(parent_dir, "docs", "library_catalog")
+
+    if os.path.isdir(dir1):
+        return dir1
+    if os.path.isdir(dir2):
+        return dir2
+    return None
+
+
 @st.cache_data
 def get_library_catalog_excel_and_date():
     """
@@ -130,44 +151,41 @@ def get_library_catalog_excel_and_date():
         the timestamp from the filename as a string in the format 'YYYY-MM-DDTHH:MM:SSZ'.
         Returns (None, None) if no matching file is found or if an error occurs.
     """
-# Start from the folder containing this script
-    current = Path(__file__).resolve().parent
-
-    catalog_dir = None
-    # Climb up until root
-    while True:
-        candidate = current / "docs" / "library_catalog"
-        if candidate.is_dir():
-            catalog_dir = candidate
-            break
-        if current.parent == current:  # reached filesystem root
-            break
-        current = current.parent
-
-    if catalog_dir is None:
-        st.error(f"Could not find a 'docs/library_catalog' directory anywhere above {Path(__file__)}")
+    directory_path = find_catalog_directory()
+    if not directory_path:
+        os.write(1, b"Directory 'docs/library_catalog' not found at either level.\n")
+        return None, None
+    
+    try:
+        files_in_directory = os.listdir(directory_path)
+    except FileNotFoundError:
+        os.write(1, b"Directory not found.\n")
         return None, None
 
     # Use fnmatch for filename matching
-    excel_files = [file for file in catalog_dir if fnmatch(file, "docs_report_qdrant_cloud*.xlsx")]
+    excel_files = [
+        f for f in files_in_directory
+        if fnmatch(f, "docs_report_qdrant_cloud*.xlsx")
+    ]
     if not excel_files:
         os.write(1, b"There is no matching Excel file in the directory.\n")
         return None, None
 
     # Function to extract the timestamp from a filename.
     def extract_timestamp(filename):
-        # Expecting filename like: docs_report_qdrant_cloud_YYYY-MM-DDTHHMMSSZ.xlsx
-        match = re.search(r'docs_report_qdrant_cloud_(\d{4}-\d{2}-\d{2}T\d{6}Z)\.xlsx', filename)
+        match = re.search(
+            r'docs_report_qdrant_cloud_(\d{4}-\d{2}-\d{2}T\d{6}Z)\.xlsx',
+            filename
+        )
         if match:
-            date_str = match.group(1)  # e.g., "2025-03-14T141504Z"
+            date_str = match.group(1)
             try:
-                dt = datetime.datetime.strptime(date_str, '%Y-%m-%dT%H%M%SZ')
-                return dt
+                return datetime.datetime.strptime(date_str, '%Y-%m-%dT%H%M%SZ')
             except Exception:
                 return None
         return None
 
-    # Build a list of tuples (filename, extracted_timestamp) and filter out any that don't parse
+    # Build a list of tuples (filename, extracted_timestamp)
     excel_files_with_time = []
     for file in excel_files:
         ts = extract_timestamp(file)
@@ -188,10 +206,9 @@ def get_library_catalog_excel_and_date():
         os.write(1, f"Failed to read the Excel file: {e}\n".encode())
         return None, None
 
-    # Format the timestamp from the filename to ISO 8601 (with colons)
+    # Format the timestamp from the filename to ISO 8601
     last_update_date = file_timestamp.strftime('%Y-%m-%dT%H:%M:%SZ')
     return df, last_update_date
-
 
 
 
