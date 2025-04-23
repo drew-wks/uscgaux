@@ -1,0 +1,19 @@
+credentials:
+  # no static users needed for Google-only login
+  users: {}
+
+cookie:
+  name: "ask_admin_cookie"
+  key: "<your-random-cookie-key>"
+  expiry_days: 30
+
+oauth2:
+  client_id:     "<YOUR_GOOGLE_OAUTH_CLIENT_ID>"
+  client_secret: "<YOUR_GOOGLE_OAUTH_CLIENT_SECRET>"
+  authorize_url: "https://accounts.google.com/o/oauth2/v2/auth"
+  token_url:     "https://oauth2.googleapis.com/token"
+  redirect_uri:  "http://localhost:8501"         # match your Streamlit URL
+  scope:
+    - openid
+    - email
+    - profile
