@@ -18,15 +18,15 @@ def init_auth():
     }
 
     # 2) Pull cookie settings & OAuth2 config from st.secrets
-    cookie_conf = st.secrets["cookie"]
-    oauth2_conf = st.secrets["oauth2"]
+    cookie_conf = st.secrets.get["cookie"]
+    oauth2_conf = st.secrets.get["oauth2"]
 
     auth = Authenticate(
         credentials=credentials_conf,
-        cookie_name=st.secrets["cookie"]["name"],
-        key=st.secrets["cookie"]["key"],
-        expiry_days=st.secrets["cookie"]["expiry_days"],
-        preauthorized=st.secrets["credentials"].get("preauthorized", {}),
+        cookie_name=st.secrets.get["cookie"]["name"],
+        key=st.secrets.get["cookie"]["key"],
+        expiry_days=st.secrets.get["cookie"]["expiry_days"],
+        preauthorized=credentials_conf("preauthorized"],
     )
     if not st.session_state.get("name"):
         auth.experimental_guest_login(
@@ -46,7 +46,7 @@ def get_gcp_clients():
         "https://www.googleapis.com/auth/drive",
     ]
     creds = Credentials.from_service_account_info(
-        st.secrets["gcp_service_account"],
+        st.secrets.get["gcp_service_account"],
         scopes=scopes
     )
     sheets_client = gspread.authorize(creds)
