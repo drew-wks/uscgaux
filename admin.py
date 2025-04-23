@@ -96,7 +96,7 @@ with tabs[4]:
     st.header("Library Catalog")
     edited = st.data_editor(catalog_df, num_rows="dynamic")
     if st.button("Save catalog"):
-    st.write("Saving…")
+        st.write("Saving…")
         try:
             sheet.clear()
             sheet.update([edited.columns.tolist()] + edited.values.tolist())
