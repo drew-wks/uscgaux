@@ -9,7 +9,16 @@ from streamlit_authenticator import Authenticate
 
 def init_auth():
     """Gate the app behind Google OAuth2 via streamlit-authenticator."""
-    credentials_conf = copy.deepcopy(st.secrets["credentials"])
+    #    (authenticator needs to be able to mutate this, so we can't give it st.secrets directly)
+    credentials_conf = {
+        "usernames": {},  
+        "preauthorized": st.secrets.get("credentials", {}).get("preauthorized", {})
+    }
+
+    # 2) Pull cookie settings & OAuth2 config from st.secrets
+    cookie_conf = st.secrets["cookie"]
+    oauth2_conf = st.secrets["oauth2"]
+
     auth = Authenticate(
         credentials=credentials_conf,
         cookie_name=st.secrets["cookie"]["name"],
