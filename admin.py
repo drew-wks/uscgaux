@@ -4,6 +4,7 @@ import pandas as pd
 from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
 from google_utils import init_auth, get_gcp_clients, fetch_pdfs
 import ui_utils
+import base64
 
 # ——————————————————————————————
 # 1) Enforce login & greeting
