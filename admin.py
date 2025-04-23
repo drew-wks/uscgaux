@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from core import init_auth, get_gcp_clients
+from google_core import init_auth, get_gcp_clients
 
 # ——————————————————————————————
 # 1) Enforce login & greeting
