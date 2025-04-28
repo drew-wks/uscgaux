@@ -1,13 +1,14 @@
 # core.py
 
 import streamlit as st
-import copy
 import pandas as pd
 import gspread
 from gspread.client import Client as SheetsClient
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build, Resource as DriveClient
+from googleapiclient.errors import HttpError
 from streamlit_authenticator import Authenticate
+from io import BytesIO
 
 
 def init_auth():
@@ -93,3 +94,67 @@ def fetch_pdfs(drive_client, folder_id: str) -> pd.DataFrame:
         st.error(f"Could not fetch PDFs from Drive: {e}")
         # Return an empty DataFrame with the expected columns
         return pd.DataFrame(columns=["Name", "ID", "URL"])
+
+
+def download_pdf_from_drive(drive_client, file_id):
+    """
+    Download a PDF file from Google Drive into memory as BytesIO.
+    Returns BytesIO object if successful, else None.
+    """
+    try:
+        request = drive_client.files().get_media(fileId=file_id)
+        fh = BytesIO()
+        downloader = MediaIoBaseDownload(fh, request)
+        done = False
+        while not done:
+            status, done = downloader.next_chunk()
+        fh.seek(0)
+        return fh
+    except HttpError as e:
+        st.error(f"Failed to download PDF file with ID {file_id}: {e}")
+        return None
+
+
+def fetch_sheet_as_dataframe(sheets_client, spreadsheet_id) -> pd.DataFrame:
+    """
+    Load the first worksheet (index 0) from the spreadsheet and return as a Pandas DataFrame.
+    """
+    try:
+        spreadsheet = sheets_client.open_by_key(spreadsheet_id)
+        worksheet = spreadsheet.get_worksheet(0)
+        data = worksheet.get_all_records()
+        df = pd.DataFrame(data)
+        return df
+    except Exception as e:
+        st.error(f"Failed to fetch sheet as DataFrame: {e}")
+        return pd.DataFrame()
+
+
+def move_file_between_folders(drive_client, file_id, target_folder_id):
+    """
+    Move a file to a new folder in Google Drive.
+    
+    Args:
+        drive_client: Authenticated Google Drive API client.
+        file_id (str): ID of the file to move.
+        target_folder_id (str): ID of the destination folder.
+    
+    Returns:
+        bool: True if move successful, False otherwise.
+    """
+    try:
+        # Retrieve the existing parents to remove
+        file = drive_client.files().get(fileId=file_id, fields='parents').execute()
+        previous_parents = ",".join(file.get('parents'))
+
+        # Move the file to the new folder
+        drive_client.files().update(
+            fileId=file_id,
+            addParents=target_folder_id,
+            removeParents=previous_parents,
+            fields='id, parents'
+        ).execute()
+        return True
+    except Exception as e:
+        logging.error(f"Failed to move file {file_id} to folder {target_folder_id}: {e}")
+        return False

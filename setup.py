@@ -1,16 +1,21 @@
 # Allows you to access some scripts in this repo as a module in other projects
+# Add this to the requestor's requirements.txt: git+https://github.com/drew-wks/uscgaux.git@main#egg=uscgaux
 
 from setuptools import setup
+
 
 setup(
     name="uscgaux",
     version="0.1.0",
-    py_modules=["google_utils"],       # we only have that one module
+    py_modules=["google_utils"],
     install_requires=[
-        "google-api-python-client",
-        "oauth2client",
+        # dependencies for google_utils.py
         "pandas",
-        # …any other libs google_utils needs
+        "gspread>=5.8.3",
+        "google-api-python-client",
+        "google-auth",
+        "streamlit_authenticator"
+        # add dependencies for other modules here
     ],
     author="Drew Wilkins",
     url="https://github.com/drew-wks/uscgaux",

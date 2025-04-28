@@ -18,4 +18,4 @@ requests
 streamlit-authenticator
 streamlit-aggrid
 
-git+https://github.com/pikepdf/pikepdf.git#egg=pikepdf
+dotenv

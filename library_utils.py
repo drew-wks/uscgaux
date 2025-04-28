@@ -1,276 +1,280 @@
-import os, warnings, uuid, logging
-from pypdf import PdfReader, errors
+import io
+import logging
+from datetime import datetime, timezone
+from googleapiclient.http import MediaIoBaseDownload
+from googleapiclient.errors import HttpError
 import pandas as pd
-from qdrant_client.http import exceptions as qdrant_exceptions
+import uuid
+from pypdf import PdfReader
 
 
-
-def check_directory_exists(directory_path, create_if_not_exists=False):
+def compute_pdf_id(pdf_bytes_io):
     """
-    Check if a directory exists. Optionally, create the directory if it does not exist.
+    Compute a unique identifier for a PDF based on its full text content.
 
-    :param directory_path: Path of the directory to check.
-    :param create_if_not_exists: If True, creates the directory if it does not exist.
-    :return: True if the directory exists or was created, False otherwise.
-    """
-    if not os.path.isdir(directory_path):
-        if create_if_not_exists:
-            try:
-                os.write(1,f"Directory does not exist: {directory_path}. Creating it.".encode())
-                os.makedirs(directory_path)
-                return True
-            except OSError as error:
-                os.write(1,f"Error creating directory {directory_path}: {error}".encode())
-                return False
-        else:
-            os.write(1,f"Directory does not exist: {directory_path}".encode())
-            return False
-    return True
-
-
-
-def check_duplicates_in_xlsx(file_path, cols):
-    """
-    Function to check for duplicates in specified columns of an Excel file.
-    
     Args:
-        file_path (str): The path to the Excel file containing metadata.
-        cols (list): List of columns to check for duplicates.
-    
-    Example usage:
-        file_path = "./docs/metadata/metadata.xlsx"
-        cols = ['title', 'publication_number', 'pdf_id', 'file_name']
-        
-        check_duplicates_in_xlsx(metadata_file_path, cols)
-    
+        pdf_bytes_io (BytesIO): In-memory bytes buffer containing the PDF data.
+
     Returns:
-        None
+        str: A UUID string representing the PDF content.
     """
     try:
-        # Read Excel into a DataFrame
-        df = pd.read_excel(file_path)
-
-        # Iterate over each column and check for duplicates
-        for column in cols:
-            if column in df.columns:
-                # Drop rows with NaN values before checking for duplicates
-                non_null_df = df.dropna(subset=[column])
-                duplicates = non_null_df[non_null_df.duplicated(subset=column, keep=False)]
-
-                if not duplicates.empty:
-                    print(f"Duplicate found in '{column}':")
-                    print(duplicates[[column]])
-                else:
-                    print(f"No duplicates in '{column}'.")
+        logging.getLogger("pypdf").setLevel(logging.ERROR)
+        pdf_bytes_io.seek(0)
+        reader = PdfReader(pdf_bytes_io)
+        full_text = ""
+        for page in reader.pages:
+            full_text += page.extract_text() or ""
+        pdf_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, full_text))
+        return pdf_uuid
     except Exception as e:
-        print(f"An error occurred: {e}")
+        logging.warning(f"Error computing PDF ID: {e}")
+        return None
 
 
-def compute_pdf_id(pdf_path):
-    '''
-    Generates a unique ID from the content of the PDF file.
+def pdf_to_Docs_via_pypdf(pdf_bytes_io, pdf_id=None):
+    """
+    Extract text documents from an in-memory PDF using pypdf.
 
-    The function extracts text from all pages of the PDF--ignoring metadata-- and 
-    generates a unique ID that is deterministic using UUID v5, so the same content
-    will always generate the same ID.
-    example ID:  3b845a10-cb3a-5014-96d8-360c8f1bf63f 
-    If the document is empty, then it sets the UUID to "EMPTY_DOCUMENT". 
-    
     Args:
-        pdf_path (str): Path to the PDF file.
-    
+        pdf_bytes_io (BytesIO): In-memory bytes buffer containing the PDF data.
+        pdf_id (str, optional): An identifier for the PDF.
+
     Returns:
-        str: UUID for the PDF content or "EMPTY_DOCUMENT" if the PDF is empty.
-    '''
-    
-    # Suppress warnings such as: wrong pointing object 12 0 (offset 0)
-    logging.getLogger("pypdf").setLevel(logging.ERROR)
-
-    reader = PdfReader(pdf_path)
-    num_pages = len(reader.pages)
-
-    # Extract text from all pages and concatenate
-    full_text = ""
-    for page_num in range(num_pages):
-        try:
-            page_text = reader.pages[page_num].extract_text()
-            if page_text:
-                full_text += page_text
-        except Exception as e:
-            logging.warning(f"Failed to extract text from page {page_num} of {pdf_path}: {e}")
-
-    if not full_text.strip():
-        return "EMPTY_DOCUMENT"
-
-    pdf_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, full_text)
-
-    return pdf_uuid
+        list of dict: List of documents extracted from the PDF, each with text and metadata.
+    """
+    try:
+        logging.getLogger("pypdf").setLevel(logging.ERROR)
+        pdf_bytes_io.seek(0)
+        reader = PdfReader(pdf_bytes_io)
+        docs = []
+        for i, page in enumerate(reader.pages):
+            text = page.extract_text() or ""
+            doc = {
+                "page_number": i + 1,
+                "text": text,
+                "pdf_id": pdf_id
+            }
+            docs.append(doc)
+        return docs
+    except Exception as e:
+        logging.warning(f"Error extracting documents from PDF: {e}")
+        return []
 
 
+def download_pdf_from_drive(drive_client, file_id):
+    """
+    Downloads a PDF file from Google Drive into memory.
 
-def get_pdf_id(pdf_path):
-    pdf_uuid = compute_pdf_id(pdf_path)
-    pdf_id = str(pdf_uuid)
-    return pdf_id
+    Args:
+        drive_client: Authenticated Google Drive API client.
+        file_id (str): The ID of the file to download.
+
+    Returns:
+        BytesIO: In-memory bytes buffer containing the PDF data, or None if download fails.
+    """
+    try:
+        request = drive_client.files().get_media(fileId=file_id)
+        fh = io.BytesIO()
+        downloader = MediaIoBaseDownload(fh, request)
+        done = False
+        while not done:
+            status, done = downloader.next_chunk()
+        fh.seek(0)
+        return fh
+    except HttpError as error:
+        if error.resp.status == 404:
+            logging.warning(f"File with ID {file_id} not found.")
+            return None
+        else:
+            raise
 
 
+def fetch_sheet_as_dataframe(sheets_client, spreadsheet_id):
+    """
+    Fetches the first worksheet of a Google Sheets spreadsheet as a Pandas DataFrame.
+
+    Args:
+        sheets_client: Authenticated Google Sheets API client.
+        spreadsheet_id (str): The ID of the spreadsheet.
+
+    Returns:
+        pd.DataFrame: DataFrame of the first worksheet.
+    """
+    try:
+        spreadsheet = sheets_client.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+        sheet_id = spreadsheet['sheets'][0]['properties']['title']
+        result = sheets_client.spreadsheets().values().get(spreadsheetId=spreadsheet_id, range=sheet_id).execute()
+        values = result.get('values', [])
+        if not values:
+            return pd.DataFrame()
+        return pd.DataFrame(values[1:], columns=values[0])
+    except Exception as e:
+        logging.warning(f"Error fetching sheet data: {e}")
+        return pd.DataFrame()
 
 
 def which_qdrant(client):
-    try:
-        if "qdrant_local" in str(type(client._client)):
-            qdrant_location = "local"
-        elif "qdrant_remote" in str(type(client._client)):
-            qdrant_location = "cloud"
-        else:
-            qdrant_location = "unknown"
-        print(f"qdrant location: {qdrant_location}")
-    except qdrant_exceptions.UnexpectedResponse as e:
-        if "404" in str(e):
-            print("The server returned a 404 Not Found error, indicating the server is active but could not find the requested URL or endpoint. This might be due to a wrong URL, an incorrect path, or a resource that doesn't exist.")
-        else:
-            raise
-    except Exception as e:
-        print(f"An unexpected error occurred: {e}")
-    return qdrant_location
-    
+    """
+    Detect whether the Qdrant client is connected to a cloud or local instance.
 
-from qdrant_client.http import models
+    Args:
+        client: Qdrant client instance.
+
+    Returns:
+        str: 'cloud' if connected to Qdrant Cloud, 'local' otherwise.
+    """
+    try:
+        info = client.get_status()
+        if hasattr(client, 'api_key') and client.api_key:
+            logging.info("Detected Qdrant Cloud client.")
+            return 'cloud'
+        else:
+            logging.info("Detected local Qdrant client.")
+            return 'local'
+    except Exception as e:
+        logging.warning(f"Error detecting Qdrant client type: {e}")
+        return 'unknown'
 
 
 def list_collections(client):
-    collections_response = client.get_collections()
-    collection_names = [c.name for c in collections_response.collections]
-    print("\nAvailable collections:")
-    for name in collection_names:
-        print(name)
+    """
+    List all collections in the Qdrant instance.
 
+    Args:
+        client: Qdrant client instance.
 
-def close_qdrant(client):
-    if 'qdrant' in globals():
-        print('deleting qdrant')
-        del qdrant
-
-    if 'client' in globals():
-        print('closing client')
-        client.close()    # Release the database from this process
-        del client
-
-def is_pdf_id_in_qdrant(client, CONFIG, pdf_id: str) -> bool:
-    '''Helper function checks if pdf_id is already in Qdrant'''
-
-    response = client.count(
-        collection_name=CONFIG["qdrant_collection_name"],
-        count_filter=models.Filter(
-            must=[
-                models.FieldCondition(
-                    key="metadata.pdf_id",
-                    match=models.MatchText(text=pdf_id),
-                ),
-            ]
-        ),
-        exact=True,  # Ensures accurate count
-    )
-
-    return response.count > 0
-
-
-def check_qdrant_record_exists(record_id, qdrant, pdfs_collection_name):
+    Returns:
+        list: List of collection names.
+    """
     try:
-        result = qdrant.retrieve(
-            collection_name=pdfs_collection_name,
-            ids=[record_id],  
-            with_payload=False,
-        )
-        if result:
-            return True
-        else:
-            return False
+        collections = client.get_collections()
+        collection_names = [col.name for col in collections.collections]
+        logging.info(f"Collections found: {collection_names}")
+        return collection_names
     except Exception as e:
-        print(f"Error occurred while checking record existence for ID {record_id}: {e}")
+        logging.warning(f"Error listing collections: {e}")
+        return []
+
+
+def is_pdf_id_in_qdrant(client, CONFIG, pdf_id):
+    """
+    Check if a document with a specific pdf_id exists in the Qdrant collection.
+
+    Args:
+        client: Qdrant client instance.
+        CONFIG (dict): Configuration dictionary containing collection name.
+        pdf_id (str): The PDF ID to check.
+
+    Returns:
+        bool: True if the document exists, False otherwise.
+    """
+    collection_name = CONFIG.get('qdrant_collection_name')
+    if not collection_name:
+        logging.warning("Collection name not specified in CONFIG.")
+        return False
+    try:
+        search_result = client.search(
+            collection_name=collection_name,
+            query_vector=[0]*1536,  # Dummy vector for filtering only
+            filter={
+                "must": [
+                    {
+                        "key": "pdf_id",
+                        "match": {"value": pdf_id}
+                    }
+                ]
+            },
+            limit=1
+        )
+        exists = len(search_result) > 0
+        logging.info(f"PDF ID '{pdf_id}' existence in collection '{collection_name}': {exists}")
+        return exists
+    except Exception as e:
+        logging.warning(f"Error checking PDF ID in Qdrant: {e}")
         return False
 
 
+def check_qdrant_record_exists(record_id, qdrant, collection_name):
+    """
+    Check if a record with the given ID exists in the specified Qdrant collection.
 
-from datetime import datetime, timezone
-import pandas as pd
+    Args:
+        record_id (str or int): The ID of the record to check.
+        qdrant: Qdrant client instance.
+        collection_name (str): The name of the collection.
 
-
-def get_planned_metadata_for_single_record(pdf_id, metadata_source_path):
-    """returns a dictionary of strings"""
-    # addresses entire metadata file as well as single record items together due to efficiency of logic
-
+    Returns:
+        bool: True if the record exists, False otherwise.
+    """
     try:
-        # Reads excel, ensuring that unit is brough in as a string
-        df = pd.read_excel(metadata_source_path, dtype={"unit": str})
+        point = qdrant.get_point(collection_name=collection_name, point_id=record_id)
+        exists = point is not None
+        logging.info(f"Record ID '{record_id}' existence in collection '{collection_name}': {exists}")
+        return exists
+    except Exception as e:
+        logging.warning(f"Error checking record existence in Qdrant: {e}")
+        return False
 
-        # Find the metadata row in df that corresponds to this pdf_id
-        pdf_metadata = df[df['pdf_id'].str.strip().astype(
-            str).str.lower() == pdf_id.lower()]
+
+def get_planned_metadata_for_single_record(metadata_df, pdf_id):
+    """
+    Given a DataFrame of metadata and a pdf_id,
+    returns a dictionary of strings representing the document's metadata.
+    """
+    try:
+        # Find the metadata row that corresponds to this pdf_id
+        pdf_metadata = metadata_df[metadata_df['pdf_id'].str.strip().astype(str).str.lower() == pdf_id.lower()]
 
         if pdf_metadata.empty:
-            raise ValueError(f"No metadata found for pdf: {pdf_id} in {metadata_source_path}")
+            raise ValueError(f"No metadata found for pdf_id: {pdf_id}")
 
-            
-        # Confirm no duplicate pdf_ids in the metadata
+        # Confirm no duplicate pdf_ids
         if len(pdf_metadata) > 1:
-            raise ValueError(
-                f"Found duplicates for pdf_id: '{pdf_id}', number of results: {len(pdf_metadata)}")
-        
-        pdf_metadata = pdf_metadata.iloc[0].copy()
-        print(f"Successfully accessed metadata for pdf: {pdf_id}")
-        
-        # Confirm no duplicate publication_numbers in the metadata
-        publication_number = pdf_metadata['publication_number']
-        if df[df['publication_number'] == publication_number].shape[0] > 1:
-            raise ValueError(
-                f"Found duplicates for publication_number: '{publication_number}'")
-            
-        # Confirm no existing upsert date
-        if pd.notna(pdf_metadata['upsert_date']):
-            raise ValueError(
-                f"Existing upsert_date found")
+            raise ValueError(f"Found duplicates for pdf_id '{pdf_id}' in metadata sheet.")
 
-        # Set the upsert date for single record
-        pdf_metadata['upsert_date'] = datetime.now(
-            timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-        print(
-            f"Successfully added upsert date {pdf_metadata['upsert_date']} to metadata")
-        
-        
-        # Confirm proper time format that is filterable in Qdrant
-        # As long as values are clean ISO 8601 strings, Qdrant will parse correctly
+        pdf_metadata = pdf_metadata.iloc[0].copy()
+        logging.info(f"Successfully accessed metadata for pdf_id: {pdf_id}")
+
+        # Confirm no duplicate publication_numbers
+        publication_number = pdf_metadata.get('publication_number', '')
+        if publication_number and metadata_df[metadata_df['publication_number'] == publication_number].shape[0] > 1:
+            raise ValueError(f"Found duplicates for publication_number: '{publication_number}'")
+
+        # Confirm no existing upsert date
+        if pd.notna(pdf_metadata.get('upsert_date')):
+            raise ValueError(f"Existing upsert_date found for pdf_id: {pdf_id}")
+
+        # Set the upsert date
+        pdf_metadata['upsert_date'] = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+        logging.info(f"Set upsert_date to {pdf_metadata['upsert_date']} for pdf_id: {pdf_id}")
+
+        # Format datetime fields correctly
         for col in ['upsert_date', 'effective_date', 'expiration_date']:
             if col in pdf_metadata.index:
                 try:
                     parsed = pd.to_datetime(pdf_metadata[col], errors='raise', utc=True)
                     pdf_metadata[col] = parsed.strftime('%Y-%m-%dT%H:%M:%SZ')
                 except Exception as e:
-                    raise ValueError(f"Invalid date format in column '{col}' for pdf_id '{pdf_id}':\n{pdf_metadata[col]}\n\nOriginal error: {e}")
+                    raise ValueError(f"Invalid date format in '{col}' for pdf_id '{pdf_id}': {e}")
 
-                
-        # Replace NaN with empty strings across all metadata
+        # Replace NaN with empty strings
         pdf_metadata = pdf_metadata.fillna('')
-        
-        # Set data types to string except booleans across all metadata
+
+        # Cast everything to string (except booleans)
         document_metadata = {
-            key: value if isinstance(value, bool) else str(
-                value) if value is not None else ''
+            key: value if isinstance(value, bool) else str(value) if value is not None else ''
             for key, value in pdf_metadata.to_dict().items()
         }
 
-        # Confirm required fields not blank
-        required_fields = ['title', 'scope', 'aux_specific',
-                            'public_release', 'pdf_file_name', 'embedding']
+        # Confirm required fields
+        required_fields = ['title', 'scope', 'aux_specific', 'public_release', 'pdf_file_name', 'embedding']
         for field in required_fields:
             if field not in pdf_metadata or pd.isna(pdf_metadata[field]) or pdf_metadata[field] == '':
-                raise ValueError(
-                    f"Required field: '{field}' is empty or missing")
-                
+                raise ValueError(f"Required field '{field}' is empty or missing for pdf_id '{pdf_id}'")
 
         return document_metadata
 
     except Exception as e:
-        print(f"Error retrieving metadata for {pdf_id}: {e}")
-        return None  # Return None if an error occurs to continue with the loop
-
+        logging.error(f"Error retrieving metadata for pdf_id {pdf_id}: {e}")
+        return None
