@@ -5,6 +5,7 @@ from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
 from google_utils import init_auth, get_gcp_clients, fetch_pdfs
 import ui_utils
 import base64
+from admin_config import *
 
 # ——————————————————————————————
 # 1) Enforce login & greeting
@@ -16,14 +17,9 @@ sheets, drive = get_gcp_clients()
 
 # ——————————————————————————————
 # Loads the catalog DataFrame once
-LIBRARY_CATALOG_ID = "16F5tRIvuHncofRuXCsQ20A7utZWRuEgA2bvj4nQQjek"
 sheet = sheets.open_by_key(LIBRARY_CATALOG_ID).sheet1
 records = sheet.get_all_records()
 catalog_df = pd.DataFrame(records)
-
-PDF_LIVE_FOLDER_ID = "1-vyQQp30mKzudkTOk7YJLmmVDirBOIpg"
-PDF_BACKLOG_FOLDER_ID = "1993TlUkd9_4XqWCutyY5oNTpmBdnxefc"
-PDF_DELETED_FOLDER_ID = "1FYUFxenYC6nWomzgv6j1O4394Zv6Bs5F"
 
 
 # Helper for Tab 0
@@ -55,6 +51,7 @@ tabs = st.tabs([
 
 # — Inspect PDFs Tab —
 with tabs[0]:
+    st.info("Google Drive folder contents")
     pdf_container = st.empty()
 
     with st.spinner("Loading PDF list…"):
@@ -102,6 +99,7 @@ with tabs[2]:
 
 # — Reports Tab —
 with tabs[3]:
+    st.info("docs/docs_report_qdrant_cloud*.xlsx'")
     df, last_update_date = ui_utils.get_library_catalog_excel_and_date()
     try:
         num_items = len(df)
@@ -120,6 +118,7 @@ with tabs[3]:
 # — Catalog Tab —
 with tabs[4]:
     st.header("Library Catalog")
+    st.info("LIBRARY_CATALOG Google Sheet on Google Drive")
     edited = st.data_editor(catalog_df, num_rows="dynamic")
     if st.button("Save catalog"):
         st.write("Saving…")
