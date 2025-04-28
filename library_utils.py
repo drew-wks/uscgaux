@@ -3,6 +3,7 @@ import logging
 from datetime import datetime, timezone
 from googleapiclient.http import MediaIoBaseDownload
 from googleapiclient.errors import HttpError
+from qdrant_client.http import models, exceptions as qdrant_exceptions
 import pandas as pd
 import uuid
 from pypdf import PdfReader
@@ -116,25 +117,38 @@ def fetch_sheet_as_dataframe(sheets_client, spreadsheet_id):
 
 def which_qdrant(client):
     """
-    Detect whether the Qdrant client is connected to a cloud or local instance.
+    Detect whether the Qdrant client is connected to a local or cloud instance.
+    Inspects the internal _client type string for clues.
 
     Args:
         client: Qdrant client instance.
 
     Returns:
-        str: 'cloud' if connected to Qdrant Cloud, 'local' otherwise.
+        str: 'local', 'cloud', or 'unknown'.
     """
     try:
-        info = client.get_status()
-        if hasattr(client, 'api_key') and client.api_key:
-            logging.info("Detected Qdrant Cloud client.")
-            return 'cloud'
+        client_type = str(type(client._client)).lower()
+
+        if "qdrant_local" in client_type:
+            qdrant_location = "local"
+        elif "qdrant_remote" in client_type:
+            qdrant_location = "cloud"
         else:
-            logging.info("Detected local Qdrant client.")
-            return 'local'
+            qdrant_location = "unknown"
+
+        logging.info(f"Qdrant location detected: {qdrant_location}")
+
+    except qdrant_exceptions.UnexpectedResponse as e:
+        if "404" in str(e):
+            logging.warning("The server returned a 404 Not Found error — server active but wrong URL or endpoint.")
+        else:
+            raise
+        qdrant_location = "unknown"
     except Exception as e:
-        logging.warning(f"Error detecting Qdrant client type: {e}")
-        return 'unknown'
+        logging.warning(f"An unexpected error occurred while detecting Qdrant location: {e}")
+        qdrant_location = "unknown"
+
+    return qdrant_location
 
 
 def list_collections(client):
@@ -278,3 +292,178 @@ def get_planned_metadata_for_single_record(metadata_df, pdf_id):
     except Exception as e:
         logging.error(f"Error retrieving metadata for pdf_id {pdf_id}: {e}")
         return None
+    
+
+def append_rows_to_sheet(sheet_client, spreadsheet_id, new_rows_df, sheet_name="Sheet1"):
+    """
+    Safely append new rows to a Google Sheets tab,
+    skipping duplicates based on pdf_id, and return inserted entries.
+
+    Args:
+        sheet_client: Authenticated Google Sheets API client.
+        spreadsheet_id: ID of the target spreadsheet.
+        new_rows_df: Pandas DataFrame containing new rows to append.
+        sheet_name: Name of the tab (default = "Sheet1").
+
+    Returns:
+        list of dicts: Each dict has 'pdf_id' and 'pdf_file_name' of appended rows.
+    """
+    try:
+        if new_rows_df.empty:
+            logging.warning("No rows to append — DataFrame is empty.")
+            return []
+
+        # Step 1: Fetch existing catalog
+        existing_sheet = sheet_client.values().get(
+            spreadsheetId=spreadsheet_id,
+            range=f"{sheet_name}"
+        ).execute()
+
+        existing_rows = existing_sheet.get('values', [])
+        existing_pdf_ids = set()
+
+        if existing_rows:
+            headers = existing_rows[0]  # first row = column headers
+            if "pdf_id" in headers:
+                pdf_id_index = headers.index("pdf_id")
+                for row in existing_rows[1:]:  # Skip header row
+                    if len(row) > pdf_id_index:
+                        existing_pdf_ids.add(row[pdf_id_index].strip().lower())
+
+        # Step 2: Filter new rows to exclude duplicates
+        safe_rows = []
+        safe_entries = []
+        for _, row in new_rows_df.iterrows():
+            pdf_id = str(row.get("pdf_id", "")).strip().lower()
+            pdf_file_name = row.get("pdf_file_name", "")
+            if pdf_id and pdf_id not in existing_pdf_ids:
+                safe_rows.append(row.values.tolist())
+                safe_entries.append({"pdf_id": pdf_id, "pdf_file_name": pdf_file_name})
+            else:
+                logging.warning(f"Duplicate detected, skipping pdf_id: {pdf_id}")
+
+        if not safe_rows:
+            logging.info("No unique rows to append after duplicate check.")
+            return []
+
+        # Step 3: Append safe new rows
+        sheet_client.values().append(
+            spreadsheetId=spreadsheet_id,
+            range=f"{sheet_name}!A1",
+            valueInputOption="USER_ENTERED",
+            insertDataOption="INSERT_ROWS",
+            body={"values": safe_rows}
+        ).execute()
+
+        logging.info(f"Appended {len(safe_rows)} new unique rows to {sheet_name} in spreadsheet {spreadsheet_id}.")
+        return safe_entries
+
+    except Exception as e:
+        logging.error(f"Error appending rows to Google Sheet: {e}")
+        return []
+
+
+def fetch_rows_marked_for_deletion(catalog_df):
+    """
+    Fetch rows marked for deletion in the library catalog.
+
+    Args:
+        catalog_df: Pandas DataFrame of the catalog.
+
+    Returns:
+        DataFrame: Rows marked for deletion.
+    """
+    if "delete" not in catalog_df.columns:
+        logging.warning("'delete' column not found in catalog.")
+        return pd.DataFrame()
+
+    deletion_rows = catalog_df[catalog_df["delete"] == True]
+    logging.info(f"Found {len(deletion_rows)} rows marked for deletion.")
+    return deletion_rows
+
+
+def delete_qdrant_by_pdf_id(client, collection_name, pdf_id):
+    """
+    Delete all vectors in a Qdrant collection that match a given pdf_id.
+
+    Args:
+        client: Qdrant client.
+        collection_name: Name of the collection.
+        pdf_id: The UUID of the PDF.
+    """
+    try:
+        filter_condition = models.Filter(
+            must=[
+                models.FieldCondition(
+                    key="metadata.pdf_id",
+                    match=models.MatchText(text=pdf_id)
+                )
+            ]
+        )
+        result = client.delete(collection_name=collection_name, points_selector=filter_condition)
+        logging.info(f"Deleted points for pdf_id {pdf_id} from {collection_name}. Operation ID: {result.operation_id}")
+    except Exception as e:
+        logging.error(f"Error deleting points for pdf_id {pdf_id}: {e}")
+
+
+def archive_row_to_tab(sheet_client, spreadsheet_id, row_data, archived_date):
+    """
+    Archive a row to the second tab of the sheet with an archived date.
+
+    Args:
+        sheet_client: Google Sheets client.
+        spreadsheet_id: ID of the spreadsheet.
+        row_data: Series or dict of the row to move.
+        archived_date: UTC datetime to set as 'archived_date'.
+    """
+    try:
+        # Assume Archive sheet is the second tab
+        archive_sheet_name = "Archived"
+        
+        # Convert row_data to a list, appending archived_date
+        archive_row = list(row_data.values)
+        archive_row.append(archived_date.strftime("%Y-%m-%dT%H:%M:%SZ"))
+
+        # Append to archive sheet
+        sheet_client.values().append(
+            spreadsheetId=spreadsheet_id,
+            range=f"{archive_sheet_name}!A1",
+            valueInputOption="USER_ENTERED",
+            body={"values": [archive_row]}
+        ).execute()
+
+        logging.info(f"Archived row for pdf_id {row_data['pdf_id'] if 'pdf_id' in row_data else '[unknown]'}.")
+
+    except Exception as e:
+        logging.error(f"Failed to archive row: {e}")
+
+
+def remove_row_from_active_tab(sheet_client, spreadsheet_id, row_index):
+    """
+    Remove a row from the active sheet (main catalog) after archiving.
+
+    Args:
+        sheet_client: Google Sheets client.
+        spreadsheet_id: ID of the spreadsheet.
+        row_index: Row number (0-indexed).
+    """
+    try:
+        sheet_id = 0  # Assume the first sheet/tab
+        body = {
+            "requests": [
+                {
+                    "deleteDimension": {
+                        "range": {
+                            "sheetId": sheet_id,
+                            "dimension": "ROWS",
+                            "startIndex": row_index,
+                            "endIndex": row_index + 1
+                        }
+                    }
+                }
+            ]
+        }
+        sheet_client.batchUpdate(spreadsheetId=spreadsheet_id, body=body).execute()
+        logging.info(f"Removed row at index {row_index} from active catalog.")
+    except Exception as e:
+        logging.error(f"Failed to remove row {row_index}: {e}")

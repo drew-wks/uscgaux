@@ -6,21 +6,16 @@ import streamlit as st
 # utilities
 import google_utils as goo_utils
 import library_utils as lib_utils
+from admin_config import *
 
 # Qdrant and embeddings
 from qdrant_client import QdrantClient
-from langchain.vectorstores import Qdrant as QdrantVectorStore
+from langchain_qdrant import QdrantVectorStore
 from langchain_openai import OpenAIEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
-# --- CONFIGURATIONS ---
-PDF_BACKLOG_FOLDER_ID = "1993TlUkd9_4XqWCutyY5oNTpmBdnxefc"
-PDF_LIVE_FOLDER_ID = "1-vyQQp30mKzudkTOk7YJLmmVDirBOIpg"
-PDF_DELETED_FOLDER_ID = "1FYUFxenYC6nWomzgv6j1O4394Zv6Bs5F"
-LIBRARY_CATALOG_ID = "16F5tRIvuHncofRuXCsQ20A7utZWRuEgA2bvj4nQQjek"
 
-ENV_PATH = "/Users/drew_wilkins/Drews_Files/Drew/Python/Localcode/.env"
-load_dotenv(ENV_PATH)
+load_dotenv(ENV_PATH)  # needed for local testing
 
 # Config LangSmith observability
 # LANGCHAIN_API_KEY = os.environ["LANGCHAIN_API_KEY"]
@@ -29,37 +24,11 @@ load_dotenv(ENV_PATH)
 
 # st.secrets pulls from ~/.streamlit when run locally
 
-# Config Qdrant
-QDRANT_URL = st.secrets["QDRANT_URL"]
-QDRANT_API_KEY = st.secrets["QDRANT_API_KEY"]
-# QDRANT_URL = st.secrets["QDRANT_URL"]
-# QDRANT_API_KEY = st.secrets["QDRANT_API_KEY"]
-QDRANT_PATH = "/Users/drew_wilkins/Drews_Files/Drew/Python/Localcode/Drews_Tools/qdrant_ASK_lib_tools/qdrant_db"  # on macOS, default is: /private/tmp/local_qdrant
 
 # Config langchain_openai
 OPENAI_API_KEY = st.secrets["OPENAI_API_KEY_ASK"] # for langchain_openai.OpenAIEmbeddings
 os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY_ASK"] # for openai client in cloud environment
 
-CONFIG = {
-    "splitter_type": "CharacterTextSplitter",
-    "chunk_size": 2000,
-    "chunk_overlap": 200,
-    "length_function": len,
-    "separators": ["}"],
-    "qdrant_collection_name": "ASK_vectorstore",
-    "embedding_model": "text-embedding-ada-002",
-    "embedding_dims": 1536,
-    "vector_name": "text-dense",
-    "sparse_vector_name": "None",
-    "sparse_embedding": "None",
-    "search_type": "mmr",
-    "k": 5,
-    'fetch_k': 20,
-    'lambda_mult': .7,
-    "score_threshold": 0.5,
-    "generation_model": "gpt-3.5-turbo-16k",
-    "temperature": 0.7,
-}
 
 # --- DRY RUN MODE ---
 DRY_RUN = True  # True will NOT actually upload to Qdrant or move files. Only simulate.
@@ -91,7 +60,7 @@ def main():
     # 1. Connect to Google APIs
     sheets_client, drive_client = goo_utils.get_gcp_clients()
 
-    # 2. Fetch PDFs list
+    # 2. Fetch PDFs list from Google Drive Backlog folder
     pdfs_df = goo_utils.fetch_pdfs(drive_client, PDF_BACKLOG_FOLDER_ID)
     if pdfs_df.empty:
         logging.warning("No PDFs found in Google Drive folder.")
@@ -103,31 +72,38 @@ def main():
         logging.error("Failed to fetch library catalog.")
         return
 
-    # 4. Connect to Qdrant (low-level)
-    qdrant_client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
+    # 4. Connect to Qdrant
+    client = QdrantClient(
+        url=QDRANT_URL,  # for cloud
+        api_key=QDRANT_API_KEY,  # for cloud
+        prefer_grpc=True,
+        # path=QDRANT_PATH,  # for local
+    )
 
     # 5. Confirm connection to Qdrant
     try:
         # Detect if client is cloud or local
-        qdrant_type = lib_utils.which_qdrant(qdrant_client)
+        qdrant_type = lib_utils.which_qdrant(client)
 
         # List existing collections
-        collections = lib_utils.list_collections(qdrant_client)
+        collections = lib_utils.list_collections(client)
 
         logging.info(f"Successfully connected to {qdrant_type.upper()} Qdrant instance at {QDRANT_URL}")
-        logging.info(f"Existing collections: {collections}")
-        logging.info(f"Target collection: {CONFIG['qdrant_collection_name']}")
+        logging.info(f"Available collections: {collections}")
+        logging.info(f"Selecting collection: {CONFIG['qdrant_collection_name']} on {qdrant_type.upper()}")
 
     except Exception as e:
         logging.error(f"Failed to connect to Qdrant: {e}")
         return
 
-    # 6. Set up LangChain QdrantVectorStore
-    embeddings = OpenAIEmbeddings(model=CONFIG["embedding_model"], openai_api_key=OPENAI_API_KEY)
-    qdrant = QdrantVectorStore(
-        client=qdrant_client,
+    # 6. Initialize a LangChain vectorstore object
+    qdrant = QdrantVectorStore(client=client,
         collection_name=CONFIG["qdrant_collection_name"],
-        embeddings=embeddings,
+        # embedding here is LC interface to the embedding model
+        embedding=OpenAIEmbeddings(
+            model=CONFIG["embedding_model"]
+        ),
+        validate_collection_config=True  # Skip validation
     )
 
     total_pdfs = len(pdfs_df)
@@ -137,7 +113,7 @@ def main():
     for idx, row in pdfs_df.iterrows():
         pdf_name = row["Name"]
         file_id = row["ID"]
-        logging.info(f"Processing: {pdf_name}")
+        logging.info(f"Processing PDF file: '{pdf_name}' with ID {file_id}")
 
         try:
             # Download PDF

@@ -1,4 +1,5 @@
-# core.py
+#  Utilities for Google Drive authentication and file management
+
 
 import streamlit as st
 import pandas as pd
@@ -7,6 +8,7 @@ from gspread.client import Client as SheetsClient
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build, Resource as DriveClient
 from googleapiclient.errors import HttpError
+from googleapiclient.http import MediaIoBaseDownload
 from streamlit_authenticator import Authenticate
 from io import BytesIO
 
