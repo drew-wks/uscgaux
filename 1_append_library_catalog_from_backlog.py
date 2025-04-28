@@ -1,6 +1,6 @@
 import logging
-from dotenv import load_dotenv
 import os  # needed for local testing
+from dotenv import load_dotenv
 import pandas as pd
 from datetime import datetime
 

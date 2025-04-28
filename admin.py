@@ -51,7 +51,7 @@ tabs = st.tabs([
 
 # — Inspect PDFs Tab —
 with tabs[0]:
-    st.info("Google Drive folder contents")
+    st.write("Source: Google Drive folder contents")
     pdf_container = st.empty()
 
     with st.spinner("Loading PDF list…"):
@@ -99,7 +99,7 @@ with tabs[2]:
 
 # — Reports Tab —
 with tabs[3]:
-    st.info("docs/docs_report_qdrant_cloud*.xlsx'")
+    st.write("Source: docs/docs_report_qdrant_cloud*.xlsx'")
     df, last_update_date = ui_utils.get_library_catalog_excel_and_date()
     try:
         num_items = len(df)
@@ -118,7 +118,7 @@ with tabs[3]:
 # — Catalog Tab —
 with tabs[4]:
     st.header("Library Catalog")
-    st.info("LIBRARY_CATALOG Google Sheet on Google Drive")
+    st.write("Source: LIBRARY_CATALOG Google Sheet on Google Drive")
     edited = st.data_editor(catalog_df, num_rows="dynamic")
     if st.button("Save catalog"):
         st.write("Saving…")
