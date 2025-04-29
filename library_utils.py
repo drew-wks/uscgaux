@@ -361,6 +361,31 @@ def append_rows_to_sheet(sheet_client, spreadsheet_id, new_rows_df, sheet_name="
     except Exception as e:
         logging.error(f"Error appending rows to Google Sheet: {e}")
         return []
+    
+    
+# TODO  FIGURE OUT WHERE VALIDATION GOES
+def validate_catalog_structure(df):
+    """
+    Validates that the catalog DataFrame contains required columns.
+
+    Args:
+        df (pd.DataFrame): The catalog DataFrame to validate.
+
+    Raises:
+        ValueError: If any required columns are missing.
+    """
+    required_columns = {"pdf_id", "pdf_file_name", "google_id", "link"}
+
+    existing_columns = set(df.columns.str.strip().str.lower())
+
+    missing_columns = required_columns - existing_columns
+
+    if missing_columns:
+        raise ValueError(
+            f"The catalog is missing required columns: {missing_columns}. Please fix the sheet structure before continuing."
+        )
+
+    logging.info("Catalog structure validated successfully.")
 
 
 def fetch_rows_marked_for_deletion(catalog_df):
