@@ -14,18 +14,18 @@ def show_metadata_form():
 
     scope = st.selectbox(
         "Scope",
-        options=["national", "area", "district", "region", "division", "sector", "flotilla", "station", "other"],
+        options=["National", "Area", "District", "Region", "Division", "Dector", "Flotilla", "Station", "other"],
         index=0
     )
 
     if scope.lower() != "national":
-        unit = st.text_input("Unit")
+        unit = st.text_input("Unit", help="examples: 7, 1SR")
     else:
         unit = ""  # Set unit to empty string when national
     
 
     title = st.text_input("Title")
-    organization = st.text_input("Organization")
+    organization = st.text_input("Organization", help="examples: CG-BSX, NACO, DCO")
     
     doc_type_selection = st.radio(
         "This is a:",
