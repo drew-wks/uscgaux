@@ -41,9 +41,6 @@ with tabs[0]:
     if uploaded:
         st.markdown("##### 2. Complete the form")
         metadata = input_form.show_metadata_form()
-        if metadata:
-            st.markdown("##### 2. Complete the form")
-
         if st.button("Generate pdf ID & Add to Qdrant"):
             # TODO: your save logic here
             st.success("Document added (placeholder)")

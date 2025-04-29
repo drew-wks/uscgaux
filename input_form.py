@@ -11,24 +11,28 @@ def show_metadata_form():
         2: "L2 Message",
         9: "Other",
     }
-    doc_type_selection = st.radio(
-        "This is a:",
-        options=list(doc_type_options.keys()),
-        format_func=lambda x: doc_type_options[x],
-        index=0
-    )
 
-    # === Scope
     scope = st.selectbox(
         "Scope",
         options=["national", "area", "district", "region", "division", "sector", "flotilla", "station", "other"],
         index=0
     )
 
-    # === Other fields
+    if scope.lower() != "national":
+        unit = st.text_input("Unit")
+    else:
+        unit = ""  # Set unit to empty string when national
+    
+
     title = st.text_input("Title")
     organization = st.text_input("Organization")
-    unit = st.text_input("Unit")
+    
+    doc_type_selection = st.radio(
+        "This is a:",
+        options=list(doc_type_options.keys()),
+        format_func=lambda x: doc_type_options[x],
+        index=0
+    )
 
     # === Issue Date
     today_iso = datetime.now().strftime("%Y-%m-%dT00:00:00Z")
