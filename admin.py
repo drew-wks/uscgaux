@@ -50,7 +50,7 @@ with tabs[0]:
 
 # — Delete Docs Tab —
 with tabs[1]:
-    st.header("Delete Documents")
+    st.markdown("#### Delete Documents")
     delete_id = st.text_input("pdf ID to delete", help="Enter the document's UUID")
     if st.button("Delete from Qdrant"):
         # TODO: call your delete-doc logic here using delete_id
@@ -76,7 +76,7 @@ with tabs[2]:
 
 # — Catalog Tab —
 with tabs[3]:
-    st.header("Library Catalog")
+    st.markdown("#### Library Catalog")
     st.write("Source: LIBRARY_CATALOG Google Sheet on Google Drive")
     edited = st.data_editor(
         catalog_df, 
