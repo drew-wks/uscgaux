@@ -9,7 +9,7 @@ import google_utils as goo_utils
 import ui_utils
 import input_form
 
-
+load_qdrant_secrets()
 goo_utils.init_auth()
 
 drive_client, sheets_client = goo_utils.get_gcp_clients()

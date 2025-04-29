@@ -14,10 +14,12 @@ LIBRARY_CATALOG_ID = "16F5tRIvuHncofRuXCsQ20A7utZWRuEgA2bvj4nQQjek"
 ENV_PATH = "/Users/drew_wilkins/Drews_Files/Drew/Python/Localcode/.env"
 
 # --- Config Qdrant ---
-QDRANT_URL = st.secrets["QDRANT_URL"]
-QDRANT_API_KEY = st.secrets["QDRANT_API_KEY"]
+def load_qdrant_secrets():
+    QDRANT_URL = st.secrets["QDRANT_URL"]
+    QDRANT_API_KEY = st.secrets["QDRANT_API_KEY"]
 # QDRANT_URL = st.secrets["QDRANT_URL"]
 # QDRANT_API_KEY = st.secrets["QDRANT_API_KEY"]
+
 QDRANT_PATH = "/Users/drew_wilkins/Drews_Files/Drew/Python/Localcode/Drews_Tools/qdrant_ASK_lib_tools/qdrant_db"
 
 # --- LangChain + RAG specific CONFIG dict ---
