@@ -52,7 +52,7 @@ tabs = st.tabs([
 
 # — Add Docs Tab —
 with tabs[0]:
-    st.header("Add Documents")
+    st.header("Add PDF Documents")
     st.info("Upload your PDFs and enter metadata below")
     uploaded = st.file_uploader("Choose PDF file", type="pdf", accept_multiple_files=False)
     
