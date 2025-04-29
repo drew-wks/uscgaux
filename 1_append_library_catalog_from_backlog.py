@@ -58,7 +58,7 @@ def main():
 
             # Get Google ID
             google_id = pdf_lookup.get(filename_lower)
-            link = f"https://drive.google.com/uc?id={google_id}" if google_id else ""
+            link = f"https://drive.google.com/file/d/{google_id}" if google_id else ""
 
             new_entry = {
                 "pdf_id": pdf_id,

@@ -19,7 +19,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 load_dotenv(ENV_PATH)
 
 # --- Constants
-BASE_DRIVE_URL = "https://drive.google.com/uc?id="
+BASE_DRIVE_URL = "https://drive.google.com/file/d/"
 
 def main():
     logging.info("Starting one-time population of google_id and link fields.")

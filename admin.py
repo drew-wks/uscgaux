@@ -42,34 +42,15 @@ def display_pdf_table(df: pd.DataFrame):
 ui_utils.apply_styles()
 
 tabs = st.tabs([
-    "Inspect PDFs",
     "Add PDFs",
     "Delete PDFs",
     "DB Report",
     "Catalog",
 ])
 
-# — Inspect PDFs Tab —
-with tabs[0]:
-    st.write("Source: Google Drive folder contents")
-    pdf_container = st.empty()
-
-    with st.spinner("Loading PDF list…"):
-        df_pdfs = goo_utils.fetch_pdfs(drive_client, PDF_LIVE_FOLDER_ID)
-
-    with pdf_container:
-        if df_pdfs is None:
-            st.error("Failed to fetch the PDF list.")
-        elif df_pdfs.empty:
-            st.info("No PDFs found in the specified folder.")
-        else:
-            st.success(f"Found {len(df_pdfs)} PDF(s):")
-            display_pdf_table(df_pdfs[["Name", "URL"]])
-
-
 
 # — Add Docs Tab —
-with tabs[1]:
+with tabs[0]:
     st.header("Add Documents")
     st.info("Upload your PDFs and enter metadata below")
     uploaded = st.file_uploader("Choose PDF file", type="pdf", accept_multiple_files=False)
@@ -90,7 +71,7 @@ with tabs[1]:
         st.success("Document added (placeholder)")
 
 # — Delete Docs Tab —
-with tabs[2]:
+with tabs[1]:
     st.header("Delete Documents")
     delete_id = st.text_input("pdf ID to delete", help="Enter the document's UUID")
     if st.button("Delete from Qdrant"):
@@ -98,7 +79,7 @@ with tabs[2]:
         st.success(f"Deleted document {delete_id} (placeholder)")
 
 # — Reports Tab —
-with tabs[3]:
+with tabs[2]:
     st.write("Source: docs/docs_report_qdrant_cloud*.xlsx'")
     df, last_update_date = ui_utils.get_library_catalog_excel_and_date()
     try:
@@ -116,7 +97,7 @@ with tabs[3]:
         st.error(f"Error accessing report: {e}")
 
 # — Catalog Tab —
-with tabs[4]:
+with tabs[3]:
     st.header("Library Catalog")
     st.write("Source: LIBRARY_CATALOG Google Sheet on Google Drive")
     edited = st.data_editor(
