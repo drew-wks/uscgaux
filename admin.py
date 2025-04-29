@@ -2,22 +2,22 @@ import streamlit as st
 st.set_page_config(page_title="ASK Auxiliary Source of Knowledge", initial_sidebar_state="collapsed")
 import pandas as pd
 from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
-from google_utils import init_auth, get_gcp_clients, fetch_pdfs
+import google_utils as goo_utils
 import ui_utils
 import base64
 from admin_config import *
 
 # ——————————————————————————————
 # 1) Enforce login & greeting
-init_auth()
+goo_utils.init_auth()
 
 # ——————————————————————————————
 # Instantiates Google Sheets & Drive clients
-sheets, drive = get_gcp_clients()
+drive_client, sheets_client = goo_utils.get_gcp_clients()
 
 # ——————————————————————————————
 # Loads the catalog DataFrame once
-sheet = sheets.open_by_key(LIBRARY_CATALOG_ID).sheet1
+sheet = sheets_client.open_by_key(LIBRARY_CATALOG_ID).sheet1
 records = sheet.get_all_records()
 catalog_df = pd.DataFrame(records)
 
@@ -55,7 +55,7 @@ with tabs[0]:
     pdf_container = st.empty()
 
     with st.spinner("Loading PDF list…"):
-        df_pdfs = fetch_pdfs(drive, PDF_LIVE_FOLDER_ID)
+        df_pdfs = goo_utils.fetch_pdfs(drive_client, PDF_LIVE_FOLDER_ID)
 
     with pdf_container:
         if df_pdfs is None:
@@ -119,7 +119,15 @@ with tabs[3]:
 with tabs[4]:
     st.header("Library Catalog")
     st.write("Source: LIBRARY_CATALOG Google Sheet on Google Drive")
-    edited = st.data_editor(catalog_df, num_rows="dynamic")
+    edited = st.data_editor(
+        catalog_df, 
+        column_config={
+            "link": st.column_config.LinkColumn(
+                "link",
+                help="Click to open the PDF in Drive"
+            )
+        },
+        num_rows="dynamic")
     if st.button("Save catalog"):
         st.write("Saving…")
         try:

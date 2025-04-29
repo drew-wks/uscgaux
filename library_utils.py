@@ -382,12 +382,12 @@ def fetch_rows_marked_for_deletion(catalog_df):
     return deletion_rows
 
 
-def delete_qdrant_by_pdf_id(client, collection_name, pdf_id):
+def delete_qdrant_by_pdf_id(qdrant_client, collection_name, pdf_id):
     """
     Delete all vectors in a Qdrant collection that match a given pdf_id.
 
     Args:
-        client: Qdrant client.
+        qdrant_client: Qdrant client.
         collection_name: Name of the collection.
         pdf_id: The UUID of the PDF.
     """
@@ -400,7 +400,7 @@ def delete_qdrant_by_pdf_id(client, collection_name, pdf_id):
                 )
             ]
         )
-        result = client.delete(collection_name=collection_name, points_selector=filter_condition)
+        result = qdrant_client.delete(collection_name=collection_name, points_selector=filter_condition)
         logging.info(f"Deleted points for pdf_id {pdf_id} from {collection_name}. Operation ID: {result.operation_id}")
     except Exception as e:
         logging.error(f"Error deleting points for pdf_id {pdf_id}: {e}")

@@ -13,6 +13,7 @@ from streamlit_authenticator import Authenticate
 from io import BytesIO
 
 
+
 def init_auth():
     """Gate the app behind Google OAuth2 via streamlit-authenticator."""
     #    (authenticator needs to be able to mutate this, so we can't give it st.secrets directly)
@@ -43,7 +44,7 @@ def init_auth():
     st.sidebar.write(f"👤 Hello, {st.session_state['name']}")
 
 
-def get_gcp_clients() -> tuple[SheetsClient, DriveClient]:
+def get_gcp_clients() -> tuple[DriveClient, SheetsClient]:
     """Return (sheets_client, drive_client) using your service-account in secrets."""
     scopes = [
         "https://spreadsheets.google.com/feeds",
@@ -63,7 +64,7 @@ def get_gcp_clients() -> tuple[SheetsClient, DriveClient]:
 
     sheets_client = gspread.authorize(creds)
     drive_client = build("drive", "v3", credentials=creds)
-    return sheets_client, drive_client
+    return drive_client, sheets_client
 
 
 def fetch_pdfs(drive_client, folder_id: str) -> pd.DataFrame:

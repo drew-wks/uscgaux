@@ -58,7 +58,7 @@ def main():
     logging.info("Starting Qdrant ingestion from Google Drive and Google Sheets.")
 
     # 1. Connect to Google APIs
-    sheets_client, drive_client = goo_utils.get_gcp_clients()
+    drive_client, sheets_client = goo_utils.get_gcp_clients()
 
     # 2. Fetch PDFs list from Google Drive Backlog folder
     pdfs_df = goo_utils.fetch_pdfs(drive_client, PDF_BACKLOG_FOLDER_ID)
@@ -73,7 +73,7 @@ def main():
         return
 
     # 4. Connect to Qdrant
-    client = QdrantClient(
+    qdrant_client = QdrantClient(
         url=QDRANT_URL,  # for cloud
         api_key=QDRANT_API_KEY,  # for cloud
         prefer_grpc=True,
@@ -83,10 +83,10 @@ def main():
     # 5. Confirm connection to Qdrant
     try:
         # Detect if client is cloud or local
-        qdrant_type = lib_utils.which_qdrant(client)
+        qdrant_type = lib_utils.which_qdrant(qdrant_client)
 
         # List existing collections
-        collections = lib_utils.list_collections(client)
+        collections = lib_utils.list_collections(qdrant_client)
 
         logging.info(f"Successfully connected to {qdrant_type.upper()} Qdrant instance at {QDRANT_URL}")
         logging.info(f"Available collections: {collections}")
@@ -97,7 +97,7 @@ def main():
         return
 
     # 6. Initialize a LangChain vectorstore object
-    qdrant = QdrantVectorStore(client=client,
+    qdrant = QdrantVectorStore(client=qdrant_client,
         collection_name=CONFIG["qdrant_collection_name"],
         # embedding here is LC interface to the embedding model
         embedding=OpenAIEmbeddings(
@@ -131,7 +131,7 @@ def main():
                 continue
 
             # Check if already exists
-            if lib_utils.is_pdf_id_in_qdrant(qdrant.client, CONFIG, pdf_id):
+            if lib_utils.is_pdf_id_in_qdrant(qdrant_client, CONFIG, pdf_id):
                 logging.info(f"Skipping {pdf_name}: already exists in Qdrant.")
                 continue
 
