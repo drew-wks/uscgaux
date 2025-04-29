@@ -10,12 +10,8 @@ import ui_utils
 import input_form
 
 
-# ——————————————————————————————
-# 1) Enforce login & greeting
 goo_utils.init_auth()
 
-# ——————————————————————————————
-# Instantiates Google Sheets & Drive clients
 drive_client, sheets_client = goo_utils.get_gcp_clients()
 
 # ——————————————————————————————
@@ -25,22 +21,6 @@ records = sheet.get_all_records()
 catalog_df = pd.DataFrame(records)
 
 
-# Helper for Tab 0
-def display_pdf_table(df: pd.DataFrame):
-    """Render a sortable DataFrame with clickable URL links."""
-    st.dataframe(
-        df,
-        column_config={
-            "URL": st.column_config.LinkColumn(
-                "Link",
-                help="Click to open the PDF in Drive"
-            )
-        },
-        use_container_width=True,
-    )
-
-# ——————————————————————————————
-# 4) Build the Admin UI
 
 ui_utils.apply_styles()
 
@@ -54,14 +34,15 @@ tabs = st.tabs([
 
 # — Add Docs Tab —
 with tabs[0]:
-    st.header("Add Documents")
-    st.info("Upload your PDFs and enter metadata below")
-
+    st.markdown("#### Add Documents")
+    st.markdown("##### 1. Select a file")
     uploaded = st.file_uploader("Choose PDF file", type="pdf", accept_multiple_files=False)
 
     if uploaded:
-        st.write("Filename:", uploaded.name)
+        st.markdown("##### 2. Complete the form")
         metadata = input_form.show_metadata_form()
+        if metadata:
+            st.markdown("##### 2. Complete the form")
 
         if st.button("Generate pdf ID & Add to Qdrant"):
             # TODO: your save logic here
