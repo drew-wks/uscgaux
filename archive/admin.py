@@ -1,4 +1,4 @@
-import streamlit as st
+import streamlit_app as st
 st.set_page_config(page_title="ASK Auxiliary Source of Knowledge", initial_sidebar_state="collapsed")
 from datetime import datetime, timedelta
 import base64

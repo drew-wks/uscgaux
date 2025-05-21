@@ -1,22 +1,25 @@
 #  Utilities for Google Drive authentication and file management
 
-
+import os
 import streamlit as st
+from io import BytesIO
 import pandas as pd
 import gspread
 from gspread.client import Client as SheetsClient
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build, Resource as DriveClient
 from googleapiclient.errors import HttpError
-from googleapiclient.http import MediaIoBaseDownload
+from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 from streamlit_authenticator import Authenticate
-from io import BytesIO
-
 
 
 def init_auth():
     """Gate the app behind Google OAuth2 via streamlit-authenticator."""
     #    (authenticator needs to be able to mutate this, so we can't give it st.secrets directly)
+    
+    if os.getenv("TESTING_LOCALLY") == "true":
+        return  # Skip auth when testing locally. Run & Debug launch.json is set to look for this switch
+    
     credentials_conf = {
         "usernames": {},  
         "preauthorized": st.secrets.get("credentials", {}).get("preauthorized", {})
@@ -67,7 +70,7 @@ def get_gcp_clients() -> tuple[DriveClient, SheetsClient]:
     return drive_client, sheets_client
 
 
-def fetch_pdfs(drive_client, folder_id: str) -> pd.DataFrame:
+def list_pdfs_in_drive_folder(drive_client, folder_id: str) -> pd.DataFrame:
     """
     Fetch all PDF files from a Google Drive folder into a DataFrame.
     Returns columns: ['Name', 'ID', 'URL'].
@@ -99,7 +102,7 @@ def fetch_pdfs(drive_client, folder_id: str) -> pd.DataFrame:
         return pd.DataFrame(columns=["Name", "ID", "URL"])
 
 
-def download_pdf_from_drive(drive_client, file_id):
+def fetch_pdf_from_drive(drive_client, file_id):
     """
     Download a PDF file from Google Drive into memory as BytesIO.
     Returns BytesIO object if successful, else None.
@@ -131,6 +134,40 @@ def fetch_sheet_as_dataframe(sheets_client, spreadsheet_id) -> pd.DataFrame:
     except Exception as e:
         st.error(f"Failed to fetch sheet as DataFrame: {e}")
         return pd.DataFrame()
+
+
+
+def upload_file_to_drive(drive_client, file_obj, file_name: str, folder_id: str) -> str:
+    """
+    Upload a PDF file to a specified Google Drive folder.
+
+    Args:
+        drive_client: Authenticated Google Drive API client.
+        file_obj: File-like object (e.g., Streamlit UploadedFile).
+        file_name (str): Desired file name in Drive.
+        folder_id (str): Target Google Drive folder ID.
+
+    Returns:
+        str: File ID of the uploaded file.
+    """
+    try:
+        file_obj.seek(0)  # Ensure start of file
+        media = MediaIoBaseUpload(file_obj, mimetype="application/pdf")
+        file_metadata = {
+            "name": file_name,
+            "parents": [folder_id]
+        }
+
+        uploaded_file = drive_client.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields="id"
+        ).execute()
+
+        return uploaded_file.get("id")
+    except Exception as e:
+        logging.error(f"Failed to upload file '{file_name}' to Drive: {e}")
+        return None
 
 
 def move_file_between_folders(drive_client, file_id, target_folder_id):

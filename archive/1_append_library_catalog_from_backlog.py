@@ -23,7 +23,7 @@ def main():
     drive_client, sheets_client = goo_utils.get_gcp_clients()
 
     # Fetch PDFs in backlog
-    backlog_df = goo_utils.fetch_pdfs(drive_client, PDF_BACKLOG_FOLDER_ID)
+    backlog_df = goo_utils.list_pdfs_in_drive_folder(drive_client, PDF_TAGGING_FOLDER)
     if backlog_df.empty:
         logging.warning("No PDFs found in backlog folder.")
         return

@@ -34,8 +34,8 @@ def main():
     catalog_df = pd.DataFrame(records)
 
     # Fetch PDFs from both backlog and live folders
-    backlog_pdfs = goo_utils.fetch_pdfs(drive_client, PDF_BACKLOG_FOLDER_ID)
-    live_pdfs = goo_utils.fetch_pdfs(drive_client, PDF_LIVE_FOLDER_ID)
+    backlog_pdfs = goo_utils.list_pdfs_in_drive_folder(drive_client, PDF_TAGGING_FOLDER)
+    live_pdfs = goo_utils.list_pdfs_in_drive_folder(drive_client, PDF_LIVE_FOLDER_ID)
 
     all_pdfs = pd.concat([backlog_pdfs, live_pdfs], ignore_index=True)
     logging.info(f"Found {len(all_pdfs)} total PDFs across Backlog and Live folders.")

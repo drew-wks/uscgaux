@@ -1,4 +1,4 @@
-import streamlit as st
+import streamlit_app as st
 from datetime import datetime, timedelta
 
 def show_metadata_form():

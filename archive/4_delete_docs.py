@@ -59,7 +59,7 @@ def main():
             lib_utils.delete_qdrant_by_pdf_id(qdrant_client, CONFIG["qdrant_collection_name"], pdf_id)
 
             # Move file from Live ➔ Deleted
-            moved = goo_utils.move_file_between_folders(drive_client, file_id, PDF_DELETED_FOLDER_ID)
+            moved = goo_utils.move_file_between_folders(drive_client, file_id, PDF_ARCHIVE_FOLDER_ID)
             if not moved:
                 logging.warning(f"Failed to move file {filename}.")
                 fail_count += 1

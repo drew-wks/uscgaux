@@ -1,7 +1,7 @@
 import logging
 import os  # needed for local testing
 from dotenv import load_dotenv
-import streamlit as st
+import streamlit_app as st
 
 # utilities
 import google_utils as goo_utils
@@ -60,8 +60,8 @@ def main():
     # 1. Connect to Google APIs
     drive_client, sheets_client = goo_utils.get_gcp_clients()
 
-    # 2. Fetch PDFs list from Google Drive Backlog folder
-    pdfs_df = goo_utils.fetch_pdfs(drive_client, PDF_BACKLOG_FOLDER_ID)
+    # 2. Build list from PDFs in Google Drive Backlog folder
+    pdfs_df = goo_utils.list_pdfs_in_drive_folder(drive_client, PDF_TAGGING_FOLDER)
     if pdfs_df.empty:
         logging.warning("No PDFs found in Google Drive folder.")
         return
@@ -117,7 +117,7 @@ def main():
 
         try:
             # Download PDF
-            pdf_bytes = goo_utils.download_pdf_from_drive(drive_client, file_id)
+            pdf_bytes = goo_utils.fetch_pdf_from_drive(drive_client, file_id)
             if pdf_bytes is None:
                 logging.warning(f"Skipping {pdf_name}: unable to download.")
                 total_failures += 1
@@ -130,7 +130,7 @@ def main():
                 total_failures += 1
                 continue
 
-            # Check if already exists
+            # Check if already exists (redundant failsafe)
             if lib_utils.is_pdf_id_in_qdrant(qdrant_client, CONFIG, pdf_id):
                 logging.info(f"Skipping {pdf_name}: already exists in Qdrant.")
                 continue
@@ -142,8 +142,8 @@ def main():
                 total_failures += 1
                 continue
 
-            # --- Metadata QA Printout ---
-            print("\nMetadata check for", pdf_name)
+            # --- Print Metadata for visual QA  ---
+            print("\nMetadata for: ", pdf_name)
             print(f"{'Field':<25}{'Type':<15}{'Value'}")
             print("-" * 70)
             for key, value in planned_metadata.items():
@@ -153,7 +153,7 @@ def main():
             # Extract full page documents and attach metadata
             docs_pages = lib_utils.pdf_to_Docs_via_pypdf(pdf_bytes, planned_validated_metadata=planned_metadata)
 
-            # --- Chunk full pages into smaller chunks
+            # Chunk page
             docs_chunks = chunk(docs_pages)
 
             # Add to Qdrant

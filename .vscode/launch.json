@@ -1,20 +1,23 @@
 {
     "version": "0.2.0",
     "configurations": [
-        
         {
             "name": "Python: Streamlit",
             "type": "python",
             "request": "launch",
             "module": "streamlit",
             "args": ["run", "${file}"],
-            "cwd": "${workspaceFolder}"
+            "cwd": "${workspaceFolder}",
+            "env": {
+                    "TESTING_LOCALLY": "true"
+      },
+      "console": "integratedTerminal"
         },
         {
             "name": "Python: Run Tests",
             "type": "python",
             "request": "launch",
-            "module": "pytest",  
+            "module": "pytest",
             "args": [],
             "console": "integratedTerminal",
             "justMyCode": true
@@ -31,7 +34,5 @@
                 "${workspaceFolder}/out/**/*.js"
             ]
         }
-    ]
-}
     ]
 }

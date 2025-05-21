@@ -1,11 +1,11 @@
 import io
 import logging
+import uuid
 from datetime import datetime, timezone
 from googleapiclient.http import MediaIoBaseDownload
 from googleapiclient.errors import HttpError
 from qdrant_client.http import models, exceptions as qdrant_exceptions
 import pandas as pd
-import uuid
 from pypdf import PdfReader
 
 
@@ -63,7 +63,7 @@ def pdf_to_Docs_via_pypdf(pdf_bytes_io, pdf_id=None):
         return []
 
 
-def download_pdf_from_drive(drive_client, file_id):
+def fetch_pdf_from_drive(drive_client, file_id):
     """
     Downloads a PDF file from Google Drive into memory.
 
@@ -294,7 +294,7 @@ def get_planned_metadata_for_single_record(metadata_df, pdf_id):
         return None
     
 
-def append_rows_to_sheet(sheet_client, spreadsheet_id, new_rows_df, sheet_name="Sheet1"):
+def safe_append_rows_to_sheet(sheet_client, spreadsheet_id, new_rows_df, sheet_name="Sheet1"):
     """
     Safely append new rows to a Google Sheets tab,
     skipping duplicates based on pdf_id, and return inserted entries.
@@ -312,23 +312,17 @@ def append_rows_to_sheet(sheet_client, spreadsheet_id, new_rows_df, sheet_name="
         if new_rows_df.empty:
             logging.warning("No rows to append — DataFrame is empty.")
             return []
+        
+        worksheet = sheet_client.open_by_key(spreadsheet_id).worksheet(sheet_name)
 
-        # Step 1: Fetch existing catalog
-        existing_sheet = sheet_client.values().get(
-            spreadsheetId=spreadsheet_id,
-            range=f"{sheet_name}"
-        ).execute()
-
-        existing_rows = existing_sheet.get('values', [])
-        existing_pdf_ids = set()
-
-        if existing_rows:
-            headers = existing_rows[0]  # first row = column headers
-            if "pdf_id" in headers:
-                pdf_id_index = headers.index("pdf_id")
-                for row in existing_rows[1:]:  # Skip header row
-                    if len(row) > pdf_id_index:
-                        existing_pdf_ids.add(row[pdf_id_index].strip().lower())
+        # Fetch existing rows
+        existing_rows = worksheet.get_all_values()
+        headers = existing_rows[0]
+        existing_pdf_ids = {
+            row[headers.index("pdf_id")].strip().lower()
+            for row in existing_rows[1:]
+            if len(row) > headers.index("pdf_id")
+        }
 
         # Step 2: Filter new rows to exclude duplicates
         safe_rows = []
@@ -336,31 +330,25 @@ def append_rows_to_sheet(sheet_client, spreadsheet_id, new_rows_df, sheet_name="
         for _, row in new_rows_df.iterrows():
             pdf_id = str(row.get("pdf_id", "")).strip().lower()
             pdf_file_name = row.get("pdf_file_name", "")
-            if pdf_id and pdf_id not in existing_pdf_ids:
-                safe_rows.append(row.values.tolist())
-                safe_entries.append({"pdf_id": pdf_id, "pdf_file_name": pdf_file_name})
+            if pdf_id not in existing_pdf_ids:
+                row_ordered = {col: row.get(col, "") for col in headers}
+                safe_rows.append([row_ordered[col] for col in headers])
+                safe_entries.append(row_ordered)
             else:
                 logging.warning(f"Duplicate detected, skipping pdf_id: {pdf_id}")
 
-        if not safe_rows:
+        if safe_rows:
+            worksheet.append_rows(safe_rows, value_input_option="USER_ENTERED")
+            logging.info(f"Appended {len(safe_rows)} new unique rows to {sheet_name}")
+        else:
             logging.info("No unique rows to append after duplicate check.")
-            return []
 
-        # Step 3: Append safe new rows
-        sheet_client.values().append(
-            spreadsheetId=spreadsheet_id,
-            range=f"{sheet_name}!A1",
-            valueInputOption="USER_ENTERED",
-            insertDataOption="INSERT_ROWS",
-            body={"values": safe_rows}
-        ).execute()
-
-        logging.info(f"Appended {len(safe_rows)} new unique rows to {sheet_name} in spreadsheet {spreadsheet_id}.")
         return safe_entries
 
     except Exception as e:
         logging.error(f"Error appending rows to Google Sheet: {e}")
         return []
+    
     
     
 # TODO  FIGURE OUT WHERE VALIDATION GOES
@@ -402,7 +390,7 @@ def fetch_rows_marked_for_deletion(catalog_df):
         logging.warning("'delete' column not found in catalog.")
         return pd.DataFrame()
 
-    deletion_rows = catalog_df[catalog_df["delete"] == True]
+    deletion_rows = catalog_df[catalog_df["delete"] is True]
     logging.info(f"Found {len(deletion_rows)} rows marked for deletion.")
     return deletion_rows
 
@@ -431,64 +419,21 @@ def delete_qdrant_by_pdf_id(qdrant_client, collection_name, pdf_id):
         logging.error(f"Error deleting points for pdf_id {pdf_id}: {e}")
 
 
-def archive_row_to_tab(sheet_client, spreadsheet_id, row_data, archived_date):
+
+def remove_row_from_sheet(sheets_client, spreadsheet_id, tab_name, row_index):
     """
-    Archive a row to the second tab of the sheet with an archived date.
+    Delete a row from a specific sheet tab.
 
     Args:
-        sheet_client: Google Sheets client.
-        spreadsheet_id: ID of the spreadsheet.
-        row_data: Series or dict of the row to move.
-        archived_date: UTC datetime to set as 'archived_date'.
+        sheets_client: gspread client.
+        spreadsheet_id: ID of the source spreadsheet.
+        tab_name: Name of the source worksheet/tab.
+        row_index: Index of the row in a DataFrame (0-based).
     """
     try:
-        # Assume Archive sheet is the second tab
-        archive_sheet_name = "Archived"
-        
-        # Convert row_data to a list, appending archived_date
-        archive_row = list(row_data.values)
-        archive_row.append(archived_date.strftime("%Y-%m-%dT%H:%M:%SZ"))
-
-        # Append to archive sheet
-        sheet_client.values().append(
-            spreadsheetId=spreadsheet_id,
-            range=f"{archive_sheet_name}!A1",
-            valueInputOption="USER_ENTERED",
-            body={"values": [archive_row]}
-        ).execute()
-
-        logging.info(f"Archived row for pdf_id {row_data['pdf_id'] if 'pdf_id' in row_data else '[unknown]'}.")
-
+        ws = sheets_client.open_by_key(spreadsheet_id).worksheet(tab_name)
+        # gspread is 1-indexed and first row is headers
+        ws.delete_rows(row_index + 2)
+        logging.info(f"Deleted row {row_index} from {tab_name} in spreadsheet {spreadsheet_id}")
     except Exception as e:
-        logging.error(f"Failed to archive row: {e}")
-
-
-def remove_row_from_active_tab(sheet_client, spreadsheet_id, row_index):
-    """
-    Remove a row from the active sheet (main catalog) after archiving.
-
-    Args:
-        sheet_client: Google Sheets client.
-        spreadsheet_id: ID of the spreadsheet.
-        row_index: Row number (0-indexed).
-    """
-    try:
-        sheet_id = 0  # Assume the first sheet/tab
-        body = {
-            "requests": [
-                {
-                    "deleteDimension": {
-                        "range": {
-                            "sheetId": sheet_id,
-                            "dimension": "ROWS",
-                            "startIndex": row_index,
-                            "endIndex": row_index + 1
-                        }
-                    }
-                }
-            ]
-        }
-        sheet_client.batchUpdate(spreadsheetId=spreadsheet_id, body=body).execute()
-        logging.info(f"Removed row at index {row_index} from active catalog.")
-    except Exception as e:
-        logging.error(f"Failed to remove row {row_index}: {e}")
+        logging.error(f"Failed to delete row {row_index} from {tab_name}: {e}")
