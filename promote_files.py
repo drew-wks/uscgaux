@@ -22,6 +22,7 @@ from log_writer import log_admin_event
 from qdrant_client import QdrantClient
 
 load_dotenv(ENV_PATH)  # needed for local testing
+load_qdrant_secrets()
 
 
 TARGET_STATUSES = ["new_validated", "clonedlive_validated"]
@@ -63,7 +64,7 @@ def promote_files():
             logging.warning(f"Failed to extract docs for {pdf_id}. Skipping.")
             continue
 
-        client = QdrantClient(QDRANT_URL, QDRANT_API_KEY])
+        client = QdrantClient(QDRANT_URL, QDRANT_API_KEY)
         # TODO Turn this into a real function. Chat GPT made this up.
         client.upload_collection_batch(collection_name=CONFIG["qdrant_collection_name"], documents=docs)
 
