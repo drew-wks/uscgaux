@@ -1,12 +1,16 @@
-import io
+import os
 import logging
 import uuid
 from datetime import datetime, timezone
 from googleapiclient.http import MediaIoBaseDownload
 from googleapiclient.errors import HttpError
+from qdrant_client import QdrantClient
 from qdrant_client.http import models, exceptions as qdrant_exceptions
+from google_utils import fetch_sheet
+from log_writer import log_admin_event
 import pandas as pd
 from pypdf import PdfReader
+
 
 
 def compute_pdf_id(pdf_bytes_io):
@@ -63,56 +67,21 @@ def pdf_to_Docs_via_pypdf(pdf_bytes_io, pdf_id=None):
         return []
 
 
-def fetch_pdf_from_drive(drive_client, file_id):
-    """
-    Downloads a PDF file from Google Drive into memory.
-
-    Args:
-        drive_client: Authenticated Google Drive API client.
-        file_id (str): The ID of the file to download.
-
-    Returns:
-        BytesIO: In-memory bytes buffer containing the PDF data, or None if download fails.
-    """
-    try:
-        request = drive_client.files().get_media(fileId=file_id)
-        fh = io.BytesIO()
-        downloader = MediaIoBaseDownload(fh, request)
-        done = False
-        while not done:
-            status, done = downloader.next_chunk()
-        fh.seek(0)
-        return fh
-    except HttpError as error:
-        if error.resp.status == 404:
-            logging.warning(f"File with ID {file_id} not found.")
-            return None
-        else:
-            raise
-
-
-def fetch_sheet_as_dataframe(sheets_client, spreadsheet_id):
-    """
-    Fetches the first worksheet of a Google Sheets spreadsheet as a Pandas DataFrame.
-
-    Args:
-        sheets_client: Authenticated Google Sheets API client.
-        spreadsheet_id (str): The ID of the spreadsheet.
-
-    Returns:
-        pd.DataFrame: DataFrame of the first worksheet.
-    """
-    try:
-        spreadsheet = sheets_client.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
-        sheet_id = spreadsheet['sheets'][0]['properties']['title']
-        result = sheets_client.spreadsheets().values().get(spreadsheetId=spreadsheet_id, range=sheet_id).execute()
-        values = result.get('values', [])
-        if not values:
-            return pd.DataFrame()
-        return pd.DataFrame(values[1:], columns=values[0])
-    except Exception as e:
-        logging.warning(f"Error fetching sheet data: {e}")
-        return pd.DataFrame()
+def init_qdrant(mode: str = "cloud") -> QdrantClient:
+    mode = mode.lower()
+    print(mode)
+    if mode == "cloud":
+        return QdrantClient(
+            url=os.environ["QDRANT_URL"],
+            api_key=os.environ["QDRANT_API_KEY"],
+            prefer_grpc=True
+        )
+    elif mode == "local":
+        return QdrantClient(
+            path=os.environ["QDRANT_PATH"]
+        )
+    else:
+        raise ValueError(f"Invalid mode '{mode}'. Must be 'cloud' or 'local'.")
 
 
 def which_qdrant(client):
@@ -171,7 +140,7 @@ def list_collections(client):
         return []
 
 
-def is_pdf_id_in_qdrant(client, CONFIG, pdf_id):
+def is_pdf_id_in_qdrant(client, RAG_CONFIG, pdf_id):
     """
     Check if a document with a specific pdf_id exists in the Qdrant collection.
 
@@ -183,7 +152,7 @@ def is_pdf_id_in_qdrant(client, CONFIG, pdf_id):
     Returns:
         bool: True if the document exists, False otherwise.
     """
-    collection_name = CONFIG.get('qdrant_collection_name')
+    collection_name = RAG_CONFIG.get('qdrant_collection_name')
     if not collection_name:
         logging.warning("Collection name not specified in CONFIG.")
         return False
@@ -260,7 +229,7 @@ def get_planned_metadata_for_single_record(metadata_df, pdf_id):
             raise ValueError(f"Existing upsert_date found for pdf_id: {pdf_id}")
 
         # Set the upsert date
-        pdf_metadata['upsert_date'] = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+        pdf_metadata['upsert_date'] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         logging.info(f"Set upsert_date to {pdf_metadata['upsert_date']} for pdf_id: {pdf_id}")
 
         # Format datetime fields correctly
@@ -348,11 +317,10 @@ def safe_append_rows_to_sheet(sheet_client, spreadsheet_id, new_rows_df, sheet_n
     except Exception as e:
         logging.error(f"Error appending rows to Google Sheet: {e}")
         return []
-    
-    
-    
-# TODO  FIGURE OUT WHERE VALIDATION GOES
-def validate_catalog_structure(df):
+
+
+
+def validate_core_metadata(df):
     """
     Validates that the catalog DataFrame contains required columns.
 
@@ -373,26 +341,91 @@ def validate_catalog_structure(df):
             f"The catalog is missing required columns: {missing_columns}. Please fix the sheet structure before continuing."
         )
 
+
     logging.info("Catalog structure validated successfully.")
 
 
-def fetch_rows_marked_for_deletion(catalog_df):
+
+def validaterows(sheets_client, spreadsheet_id):
     """
-    Fetch rows marked for deletion in the library catalog.
+    Validates rows with status = 'new_for_validation' or 'clonedlive_for_validation'
+    and updates their status to 'new_validated' or 'clonedlive_validated'.
+    """
+    VALIDATION_STATUSES = ["new_for_validation", "clonedlive_for_validation"]
+
+    df = fetch_sheet(spreadsheet_id)  # ✅ Use your helper to read the data
+
+    try:
+        worksheet = sheets_client.open_by_key(spreadsheet_id).sheet1  # ✅ Only needed for updating
+    except Exception as e:
+        logging.error(f"Unable to open worksheet for updates: {e}")
+        return
+
+    headers = df.columns.tolist()
+
+    for idx, row in df.iterrows():
+        current_status = str(row.get("status", "")).strip().lower()
+        if current_status not in VALIDATION_STATUSES:
+            continue
+
+        pdf_id = row.get("pdf_id")
+        if not pdf_id:
+            logging.warning(f"Row {idx + 2} missing pdf_id. Skipping validation.")
+            continue
+
+        try:
+            if validate_core_metadata(row):
+                new_status = (
+                    "new_validated" if current_status == "new_for_validation"
+                    else "clonedlive_validated"
+                )
+                row["status"] = new_status
+                row["timestamp_validated"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+                updated_row = [row.get(col, "") for col in headers]
+
+                # Update sheet row (Google Sheets is 1-indexed and row 1 is headers)
+                worksheet.update(f"A{idx + 2}", [updated_row])
+
+                log_admin_event("validated", pdf_id, row.get("filename"))
+
+        except Exception as e:
+            logging.warning(f"Validation failed for {pdf_id} at row {idx + 2}: {e}")
+
+
+
+def fetch_rows_by_status(catalog_df, keywords):
+    """
+    Fetch rows from a catalog DataFrame where the 'status' column contains 
+    any of the given keywords (case-insensitive partial match).
 
     Args:
-        catalog_df: Pandas DataFrame of the catalog.
+        catalog_df (pd.DataFrame): The catalog DataFrame.
+        keywords (str or list of str): Keyword(s) to match in the 'status' column.
 
     Returns:
-        DataFrame: Rows marked for deletion.
+        pd.DataFrame: Filtered rows matching any of the keywords.
     """
-    if "delete" not in catalog_df.columns:
-        logging.warning("'delete' column not found in catalog.")
+    if "status" not in catalog_df.columns:
+        logging.warning("'status' column not found in catalog.")
         return pd.DataFrame()
 
-    deletion_rows = catalog_df[catalog_df["delete"] is True]
-    logging.info(f"Found {len(deletion_rows)} rows marked for deletion.")
-    return deletion_rows
+    # Normalize to lowercase string
+    status_series = catalog_df["status"].astype(str).str.lower()
+
+    # Ensure keywords is a list
+    if isinstance(keywords, str):
+        keywords = [keywords]
+
+    # Build combined match mask
+    match_mask = status_series.apply(lambda x: any(kw.lower() in x for kw in keywords))
+    matched_rows = catalog_df[match_mask]
+
+    logging.info(f"Found {len(matched_rows)} rows matching keywords: {keywords}")
+    return matched_rows
+
+
+
 
 
 def delete_qdrant_by_pdf_id(qdrant_client, collection_name, pdf_id):
@@ -420,20 +453,25 @@ def delete_qdrant_by_pdf_id(qdrant_client, collection_name, pdf_id):
 
 
 
-def remove_row_from_sheet(sheets_client, spreadsheet_id, tab_name, row_index):
+def remove_rows_from_sheet(sheets_client, spreadsheet_id, row_indices, sheet_name="Sheet1"):
     """
-    Delete a row from a specific sheet tab.
+    Delete multiple rows from a specific sheet tab.
 
     Args:
         sheets_client: gspread client.
         spreadsheet_id: ID of the source spreadsheet.
-        tab_name: Name of the source worksheet/tab.
-        row_index: Index of the row in a DataFrame (0-based).
+        row_indices: List of 0-based row indices (relative to a DataFrame).
+        sheet_name: Name of the worksheet/tab (default = "Sheet1").
     """
     try:
-        ws = sheets_client.open_by_key(spreadsheet_id).worksheet(tab_name)
-        # gspread is 1-indexed and first row is headers
-        ws.delete_rows(row_index + 2)
-        logging.info(f"Deleted row {row_index} from {tab_name} in spreadsheet {spreadsheet_id}")
+        ws = sheets_client.open_by_key(spreadsheet_id).worksheet(sheet_name)
+
+        # Sort in reverse to prevent index shifting
+        for row_index in sorted(row_indices, reverse=True):
+            gsheet_row = row_index + 2  # account for 1-indexing + header row
+            ws.delete_rows(gsheet_row)
+            logging.info(f"Deleted row {row_index} (sheet row {gsheet_row}) from {sheet_name}")
+
     except Exception as e:
-        logging.error(f"Failed to delete row {row_index} from {tab_name}: {e}")
+        logging.error(f"Failed to delete rows from {sheet_name}: {e}")
+

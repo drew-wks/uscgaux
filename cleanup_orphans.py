@@ -11,7 +11,8 @@ Performs integrity checks:
 
 import os
 import pandas as pd
-from google_utils import get_gcp_clients, list_pdfs_in_drive_folder
+import logging
+from google_utils import get_gcp_clients, list_pdfs_in_drive_folder, get_folder_name
 from admin_config import GOOGLE_CONFIG
 from log_writer import log_admin_event
 
@@ -56,7 +57,9 @@ def cleanup_orphans():
     orphan_files = all_files_df[~all_files_df["pdf_id"].isin(pdf_ids_in_sheet)]
 
     for _, row in orphan_files.iterrows():
-        log_admin_event("orphan_file_detected", row["pdf_id"], row["Name"])
+        folder = row.get("source_folder", "unknown_folder")
+        log_admin_event(f"orphan_file_detected_in_{folder}", row["pdf_id"], row["Name"])
+
 
 if __name__ == "__main__":
     cleanup_orphans()

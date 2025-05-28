@@ -6,13 +6,13 @@ Provides a reusable logging function for all agents to append entries to ADMIN_E
 """
 
 import os, logging
-from datetime import datetime
+from datetime import datetime, timezone
 from dotenv import load_dotenv
-from admin_config import load_qdrant_secrets, ENV_PATH
+from admin_config import set_env_vars
 from google_utils import get_gcp_clients
 
 
-load_dotenv(ENV_PATH)  # needed for local testing  
+set_env_vars()  # needed for local testing  
 
 
 def log_admin_event(action, pdf_id, filename, extra_columns=None):
@@ -29,7 +29,7 @@ def log_admin_event(action, pdf_id, filename, extra_columns=None):
     drive_client, sheets_client = get_gcp_clients()
     
     event = {
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "action": action,
         "pdf_id": pdf_id,
         "pdf_file_name": filename

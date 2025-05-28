@@ -121,14 +121,14 @@ def fetch_pdf_from_drive(drive_client, file_id):
         return None
 
 
-def fetch_sheet_as_dataframe(sheets_client, spreadsheet_id) -> pd.DataFrame:
+def fetch_sheet(spreadsheet_id) -> pd.DataFrame:
     """
     Load the first worksheet (index 0) from the spreadsheet and return as a Pandas DataFrame.
     """
     try:
-        spreadsheet = sheets_client.open_by_key(spreadsheet_id)
-        worksheet = spreadsheet.get_worksheet(0)
-        data = worksheet.get_all_records()
+        drive_client, sheets_client = get_gcp_clients()
+        sheet = sheets_client.open_by_key(spreadsheet_id).sheet1
+        data = sheet.get_all_records()
         df = pd.DataFrame(data)
         return df
     except Exception as e:
@@ -198,3 +198,27 @@ def move_file_between_folders(drive_client, file_id, target_folder_id):
     except Exception as e:
         logging.error(f"Failed to move file {file_id} to folder {target_folder_id}: {e}")
         return False
+    
+    
+def get_folder_name(drive_client, file_id):
+    """
+    Returns the name of the folder containing the file with the given file_id.
+
+    Args:
+        drive_client: An authenticated Google Drive API client.
+        file_id (str): The ID of the file.
+
+    Returns:
+        str: Name of the parent folder, or "Unknown" if not found.
+    """
+    try:
+        file_metadata = drive_client.files().get(fileId=file_id, fields='parents').execute()
+        parent_ids = file_metadata.get("parents", [])
+        if not parent_ids:
+            return "Unknown"
+
+        folder_metadata = drive_client.files().get(fileId=parent_ids[0], fields='name').execute()
+        return folder_metadata.get("name", "Unknown")
+    except Exception as e:
+        logging.warning(f"Failed to fetch folder name for file ID {file_id}: {e}")
+        return "Unknown"

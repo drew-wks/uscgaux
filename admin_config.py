@@ -1,5 +1,5 @@
 import os
-import streamlit as st
+from dotenv import load_dotenv
 
 
 # --- Google Drive Folder IDs ---
@@ -15,27 +15,32 @@ GOOGLE_CONFIG = {
     "LIBRARY_CATALOG_ID": "16F5tRIvuHncofRuXCsQ20A7utZWRuEgA2bvj4nQQjek",  # a Google Sheet
 }
 
-for key, value in GOOGLE_CONFIG.items():
-    os.environ[key] = value
-
-# --- Environment Variable Path ---
-ENV_PATH = "/Users/drew_wilkins/Drews_Files/Drew/Python/Localcode/.env"
 
 # --- Config Qdrant here because don't import streamlit in library_utils---
-def load_qdrant_secrets():
-    QDRANT_URL = st.secrets["QDRANT_URL"]
-    QDRANT_API_KEY = st.secrets["QDRANT_API_KEY"]
+def set_env_vars():
+    for key, value in GOOGLE_CONFIG.items():
+        os.environ[key] = value
+    os.environ["QDRANT_PATH"] = "/Users/drew_wilkins/Drews_Files/Drew/Python/Localcode/Drews_Tools/qdrant_ASK_lib_tools/qdrant_db"
+    load_dotenv("/Users/drew_wilkins/Drews_Files/Drew/Python/Localcode/.env")  # needed for local testing
+    try:
+        import streamlit as st
+        os.environ["QDRANT_URL"] = st.secrets["QDRANT_URL"]
+        os.environ["QDRANT_API_KEY"] = st.secrets["QDRANT_API_KEY"]
+    except ModuleNotFoundError:
+        print("Streamlit not available — skipping st.secrets.")
+    except Exception as e:
+        print(f"Could not load Streamlit secrets: {e}")
 
 
-QDRANT_PATH = "/Users/drew_wilkins/Drews_Files/Drew/Python/Localcode/Drews_Tools/qdrant_ASK_lib_tools/qdrant_db"
 
-# --- LangChain + RAG specific CONFIG dict ---
-CONFIG = {
+
+RAG_CONFIG = {
     "splitter_type": "CharacterTextSplitter",
     "chunk_size": 2000,
     "chunk_overlap": 200,
     "length_function": len,
     "separators": ["}"],
+    "qdrant_location": "cloud",
     "qdrant_collection_name": "ASK_vectorstore",
     "embedding_model": "text-embedding-ada-002",
     "embedding_dims": 1536,
