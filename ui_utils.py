@@ -1,4 +1,4 @@
-import os  # needed for local testing
+import os, logging  # needed for local testing
 import datetime
 import requests
 import streamlit as st 
@@ -213,7 +213,7 @@ def get_library_catalog_excel_and_date():
 
 
 def main():
-    print("Running utils.py directly")
+    logging.info("Running utils.py directly")
     # You can include test code for utility functions here, if desired
 
 if __name__ == "__main__":

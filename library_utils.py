@@ -6,11 +6,10 @@ from googleapiclient.http import MediaIoBaseDownload
 from googleapiclient.errors import HttpError
 from qdrant_client import QdrantClient
 from qdrant_client.http import models, exceptions as qdrant_exceptions
-from google_utils import fetch_sheet
-from log_writer import log_admin_event
+from google_utils import fetch_sheet_as_df
+from log_writer import log_event
 import pandas as pd
 from pypdf import PdfReader
-
 
 
 def compute_pdf_id(pdf_bytes_io):
@@ -66,138 +65,6 @@ def pdf_to_Docs_via_pypdf(pdf_bytes_io, pdf_id=None):
         logging.warning(f"Error extracting documents from PDF: {e}")
         return []
 
-
-def init_qdrant(mode: str = "cloud") -> QdrantClient:
-    mode = mode.lower()
-    print(mode)
-    if mode == "cloud":
-        return QdrantClient(
-            url=os.environ["QDRANT_URL"],
-            api_key=os.environ["QDRANT_API_KEY"],
-            prefer_grpc=True
-        )
-    elif mode == "local":
-        return QdrantClient(
-            path=os.environ["QDRANT_PATH"]
-        )
-    else:
-        raise ValueError(f"Invalid mode '{mode}'. Must be 'cloud' or 'local'.")
-
-
-def which_qdrant(client):
-    """
-    Detect whether the Qdrant client is connected to a local or cloud instance.
-    Inspects the internal _client type string for clues.
-
-    Args:
-        client: Qdrant client instance.
-
-    Returns:
-        str: 'local', 'cloud', or 'unknown'.
-    """
-    try:
-        client_type = str(type(client._client)).lower()
-
-        if "qdrant_local" in client_type:
-            qdrant_location = "local"
-        elif "qdrant_remote" in client_type:
-            qdrant_location = "cloud"
-        else:
-            qdrant_location = "unknown"
-
-        logging.info(f"Qdrant location detected: {qdrant_location}")
-
-    except qdrant_exceptions.UnexpectedResponse as e:
-        if "404" in str(e):
-            logging.warning("The server returned a 404 Not Found error — server active but wrong URL or endpoint.")
-        else:
-            raise
-        qdrant_location = "unknown"
-    except Exception as e:
-        logging.warning(f"An unexpected error occurred while detecting Qdrant location: {e}")
-        qdrant_location = "unknown"
-
-    return qdrant_location
-
-
-def list_collections(client):
-    """
-    List all collections in the Qdrant instance.
-
-    Args:
-        client: Qdrant client instance.
-
-    Returns:
-        list: List of collection names.
-    """
-    try:
-        collections = client.get_collections()
-        collection_names = [col.name for col in collections.collections]
-        logging.info(f"Collections found: {collection_names}")
-        return collection_names
-    except Exception as e:
-        logging.warning(f"Error listing collections: {e}")
-        return []
-
-
-def is_pdf_id_in_qdrant(client, RAG_CONFIG, pdf_id):
-    """
-    Check if a document with a specific pdf_id exists in the Qdrant collection.
-
-    Args:
-        client: Qdrant client instance.
-        CONFIG (dict): Configuration dictionary containing collection name.
-        pdf_id (str): The PDF ID to check.
-
-    Returns:
-        bool: True if the document exists, False otherwise.
-    """
-    collection_name = RAG_CONFIG.get('qdrant_collection_name')
-    if not collection_name:
-        logging.warning("Collection name not specified in CONFIG.")
-        return False
-    try:
-        search_result = client.search(
-            collection_name=collection_name,
-            query_vector=[0]*1536,  # Dummy vector for filtering only
-            filter={
-                "must": [
-                    {
-                        "key": "pdf_id",
-                        "match": {"value": pdf_id}
-                    }
-                ]
-            },
-            limit=1
-        )
-        exists = len(search_result) > 0
-        logging.info(f"PDF ID '{pdf_id}' existence in collection '{collection_name}': {exists}")
-        return exists
-    except Exception as e:
-        logging.warning(f"Error checking PDF ID in Qdrant: {e}")
-        return False
-
-
-def check_qdrant_record_exists(record_id, qdrant, collection_name):
-    """
-    Check if a record with the given ID exists in the specified Qdrant collection.
-
-    Args:
-        record_id (str or int): The ID of the record to check.
-        qdrant: Qdrant client instance.
-        collection_name (str): The name of the collection.
-
-    Returns:
-        bool: True if the record exists, False otherwise.
-    """
-    try:
-        point = qdrant.get_point(collection_name=collection_name, point_id=record_id)
-        exists = point is not None
-        logging.info(f"Record ID '{record_id}' existence in collection '{collection_name}': {exists}")
-        return exists
-    except Exception as e:
-        logging.warning(f"Error checking record existence in Qdrant: {e}")
-        return False
 
 
 def get_planned_metadata_for_single_record(metadata_df, pdf_id):
@@ -345,52 +212,115 @@ def validate_core_metadata(df):
     logging.info("Catalog structure validated successfully.")
 
 
-
-def validaterows(sheets_client, spreadsheet_id):
+def validate_rows(sheets_client):
     """
-    Validates rows with status = 'new_for_validation' or 'clonedlive_for_validation'
-    and updates their status to 'new_validated' or 'clonedlive_validated'.
+    Validates all rows in the spreadsheet regardless of status.
+    
+    - Required fields (except ignored) must be non-empty
+    - All fields must be strings, except for aux_specific and public_release
+    - aux_specific and public_release must be valid booleans
+    - Date fields must be ISO 8601 UTC strings if present
+    - If row is valid, logs the validation event only (no data is modified)
+
+    Returns:
+        valid_df (DataFrame): rows that passed all validation checks
+        invalid_df (DataFrame): rows that failed one or more validation checks, with an 'issues' column
+        log_df (DataFrame): DataFrame of log entries for valid and invalid cases
     """
-    VALIDATION_STATUSES = ["new_for_validation", "clonedlive_for_validation"]
 
-    df = fetch_sheet(spreadsheet_id)  # ✅ Use your helper to read the data
-
-    try:
-        worksheet = sheets_client.open_by_key(spreadsheet_id).sheet1  # ✅ Only needed for updating
-    except Exception as e:
-        logging.error(f"Unable to open worksheet for updates: {e}")
-        return
-
+    df = fetch_sheet_as_df(sheets_client, os.environ["LIBRARY_UNIFIED"])
     headers = df.columns.tolist()
 
+    ignored_fields = {"publication_number", "organization", "unit", "upsert_date", "status", "status_timestamp"}
+    required_fields = [col for col in headers if col not in ignored_fields]
+    date_fields = {"issue_date", "upsert_date", "expiration_date", "status_timestamp"}
+    bool_fields = {"aux_specific", "public_release"}
+
+    valid_rows = []
+    invalid_rows = []
+    log_entries = []
+
     for idx, row in df.iterrows():
-        current_status = str(row.get("status", "")).strip().lower()
-        if current_status not in VALIDATION_STATUSES:
-            continue
-
         pdf_id = row.get("pdf_id")
+        row_valid = True
+        issues = []
+
         if not pdf_id:
-            logging.warning(f"Row {idx + 2} missing pdf_id. Skipping validation.")
-            continue
+            issues.append("missing_pdf_id")
+            row_valid = False
 
-        try:
-            if validate_core_metadata(row):
-                new_status = (
-                    "new_validated" if current_status == "new_for_validation"
-                    else "clonedlive_validated"
-                )
-                row["status"] = new_status
-                row["timestamp_validated"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        # Required fields must be populated
+        missing_fields = [f for f in required_fields if not str(row.get(f, "")).strip()]
+        if missing_fields:
+            issues.append(f"missing_required_fields: {missing_fields}")
+            row_valid = False
+            
+        # Unit field must be populated if scope is not "National" or blank
+        scope = str(row.get("scope", "")).strip()
+        unit = str(row.get("unit", "")).strip()
+        if scope and scope.lower() != "national" and not unit:
+            issues.append(f"missing_unit_for_scope: scope='{scope}' requires a unit")
+            row_valid = False
 
-                updated_row = [row.get(col, "") for col in headers]
+        # All fields except bools must be strings
+        non_string_fields = [
+            f for f in headers
+            if f not in bool_fields and not isinstance(row.get(f), str)
+        ]
+        if non_string_fields:
+            issues.append(f"non_string_fields: {non_string_fields}")
+            row_valid = False
 
-                # Update sheet row (Google Sheets is 1-indexed and row 1 is headers)
-                worksheet.update(f"A{idx + 2}", [updated_row])
+        # Boolean fields must be valid
+        bad_bools = [
+            f for f in bool_fields
+            if str(row.get(f)).strip().lower() not in {"true", "false", "1", "0"}
+        ]
+        if bad_bools:
+            issues.append(f"invalid_boolean_fields: {bad_bools}")
+            row_valid = False
 
-                log_admin_event("validated", pdf_id, row.get("filename"))
+        # Date fields must follow the correct format
+        bad_dates = []
+        for f in date_fields:
+            val = str(row.get(f, "")).strip()
+            if val:
+                try:
+                    datetime.strptime(val, "%Y-%m-%dT%H:%M:%SZ")
+                except ValueError:
+                    bad_dates.append(f"{f}='{val}'")
+        if bad_dates:
+            issues.append(f"invalid_date_format: {bad_dates}")
+            row_valid = False
 
-        except Exception as e:
-            logging.warning(f"Validation failed for {pdf_id} at row {idx + 2}: {e}")
+        # Validation logic
+        if row_valid:
+            valid_rows.append(row)
+
+        if not row_valid:
+            row_with_issues = row.copy()
+            row_with_issues["issues"] = "; ".join(issues)
+            invalid_rows.append(row_with_issues)
+
+            log_entries.append({
+                "action": "validation_failed",
+                "pdf_id": pdf_id,
+                "pdf_file_name": row.get("pdf_file_name"),
+                "row_index": idx + 2,
+                "issues": row_with_issues["issues"]
+            })
+
+    valid_df = pd.DataFrame(valid_rows)
+    invalid_df = pd.DataFrame(invalid_rows)
+    log_df = pd.DataFrame(log_entries)
+
+
+    # Reorder columns so that 'issues' comes first
+    if not invalid_df.empty and "issues" in invalid_df.columns:
+        cols = ["issues"] + [col for col in invalid_df.columns if col != "issues"]
+        invalid_df = invalid_df[cols]
+        
+    return valid_df, invalid_df, log_df
 
 
 
@@ -426,34 +356,7 @@ def fetch_rows_by_status(catalog_df, keywords):
 
 
 
-
-
-def delete_qdrant_by_pdf_id(qdrant_client, collection_name, pdf_id):
-    """
-    Delete all vectors in a Qdrant collection that match a given pdf_id.
-
-    Args:
-        qdrant_client: Qdrant client.
-        collection_name: Name of the collection.
-        pdf_id: The UUID of the PDF.
-    """
-    try:
-        filter_condition = models.Filter(
-            must=[
-                models.FieldCondition(
-                    key="metadata.pdf_id",
-                    match=models.MatchText(text=pdf_id)
-                )
-            ]
-        )
-        result = qdrant_client.delete(collection_name=collection_name, points_selector=filter_condition)
-        logging.info(f"Deleted points for pdf_id {pdf_id} from {collection_name}. Operation ID: {result.operation_id}")
-    except Exception as e:
-        logging.error(f"Error deleting points for pdf_id {pdf_id}: {e}")
-
-
-
-def remove_rows_from_sheet(sheets_client, spreadsheet_id, row_indices, sheet_name="Sheet1"):
+def remove_rows(sheets_client, spreadsheet_id, row_indices, sheet_name="Sheet1"):
     """
     Delete multiple rows from a specific sheet tab.
 

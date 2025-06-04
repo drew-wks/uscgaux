@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import base64
 import pandas as pd
 from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
-from admin_config import *
+from app_config import *
 import google_utils as goo_utils
 import ui_utils
 import input_form

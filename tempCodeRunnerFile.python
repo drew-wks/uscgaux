@@ -1,0 +1,9 @@
+from streamlit.testing.v1 import AppTest
+
+
+def test_delete_tagged_files():
+    """Basic  test"""
+    at = AppTest.from_file("test_delete_tagged_files.py", default_timeout=10).run()
+    # Supported elements are primarily exposed as properties on the script
+    # results object, which returns a sequence of that element.
+    assert not at.exception

@@ -1,1 +1,1 @@
-from admin_config import *
+from app_config import *

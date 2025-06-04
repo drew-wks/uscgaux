@@ -6,8 +6,9 @@ from datetime import datetime
 
 # Utilities
 import google_utils as goo_utils
+from google_utils import fetch_sheet_from_drive
 import library_utils as lib_utils
-from admin_config import *
+from app_config import *
 
 load_dotenv(ENV_PATH)
 
@@ -29,7 +30,7 @@ def main():
         return
 
     # Fetch current catalog
-    catalog_df = goo_utils.fetch_sheet_as_dataframe(sheets_client, LIBRARY_CATALOG_ID)
+    catalog_df = fetch_sheet_from_drive(sheets_client, os.environ["LIBRARY_CATALOG_ID"])
     if catalog_df.empty:
         logging.warning("Catalog sheet is empty.")
         return

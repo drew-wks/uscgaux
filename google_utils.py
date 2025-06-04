@@ -1,11 +1,15 @@
 #  Utilities for Google Drive authentication and file management
 
 import os
+import logging
 import streamlit as st
 from io import BytesIO
 import pandas as pd
+from typing import overload, Literal, Union, Tuple
 import gspread
+from gspread_dataframe import get_as_dataframe
 from gspread.client import Client as SheetsClient
+from gspread.worksheet import Worksheet
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build, Resource as DriveClient
 from googleapiclient.errors import HttpError
@@ -16,6 +20,9 @@ from streamlit_authenticator import Authenticate
 def init_auth():
     """Gate the app behind Google OAuth2 via streamlit-authenticator."""
     #    (authenticator needs to be able to mutate this, so we can't give it st.secrets directly)
+    
+    #   Google policy is OAuth clients that have remained inactive for six months will be automatically deleted. Inactivity is 
+    #   determined based on the absence of token exchanges or client updates.
     
     if os.getenv("TESTING_LOCALLY") == "true":
         return  # Skip auth when testing locally. Run & Debug launch.json is set to look for this switch
@@ -47,30 +54,69 @@ def init_auth():
     st.sidebar.write(f"👤 Hello, {st.session_state['name']}")
 
 
-def get_gcp_clients() -> tuple[DriveClient, SheetsClient]:
-    """Return (sheets_client, drive_client) using your service-account in secrets."""
+def get_sheets_client() -> gspread.Client:
+    creds_info = st.secrets.get("gcp_service_account")
+    if not creds_info:
+        st.error("Missing `[gcp_service_account]` in your secrets.")
+        st.stop()
+
     scopes = [
         "https://spreadsheets.google.com/feeds",
         "https://www.googleapis.com/auth/drive",
     ]
+    creds = Credentials.from_service_account_info(creds_info, scopes=scopes)
+    return gspread.authorize(creds)
 
+
+@st.cache_resource
+def get_cached_sheets_client() -> gspread.Client:
+    """Return cached versions (sheets_client, drive_client) using your service-account in secrets."""
+    return get_sheets_client()
+
+
+def get_drive_client() -> DriveClient:
     creds_info = st.secrets.get("gcp_service_account")
     if not creds_info:
-        st.error("Missing `[gcp_service_account]` in your secrets—cannot authenticate to Google APIs.")
+        st.error("Missing `[gcp_service_account]` in your secrets.")
         st.stop()
 
+
+    scopes = ["https://www.googleapis.com/auth/drive"]
+    creds = Credentials.from_service_account_info(creds_info, scopes=scopes)
+    return build("drive", "v3", credentials=creds)
+
+
+@st.cache_resource
+def get_cached_drive_client() -> DriveClient:
+    """Return cached versions (sheets_client, drive_client) using your service-account in secrets."""
+    return get_drive_client() 
+
+
+def get_folder_name(drive_client: DriveClient, file_id):
+    """
+    Returns the name of the folder containing the file with the given file_id.
+
+    Args:
+        drive_client: An authenticated Google Drive API client.
+        file_id (str): The ID of the file.
+
+    Returns:
+        str: Name of the parent folder, or "Unknown" if not found.
+    """
     try:
-        creds = Credentials.from_service_account_info(creds_info, scopes=scopes)
+        file_metadata = drive_client.files().get(fileId=file_id, fields='parents').execute()
+        parent_ids = file_metadata.get("parents", [])
+        if not parent_ids:
+            return "Unknown"
+
+        folder_metadata = drive_client.files().get(fileId=parent_ids[0], fields='name').execute()
+        return folder_metadata.get("name", "Unknown")
     except Exception as e:
-        st.error(f"Error loading service-account credentials: {e}")
-        st.stop()
-
-    sheets_client = gspread.authorize(creds)
-    drive_client = build("drive", "v3", credentials=creds)
-    return drive_client, sheets_client
+        logging.warning(f"Failed to fetch folder name for file ID {file_id}: {e}")
+        return "Unknown"
 
 
-def list_pdfs_in_drive_folder(drive_client, folder_id: str) -> pd.DataFrame:
+def list_pdfs_in_drive_folder(drive_client: DriveClient, folder_id: str) -> pd.DataFrame:
     """
     Fetch all PDF files from a Google Drive folder into a DataFrame.
     Returns columns: ['Name', 'ID', 'URL'].
@@ -102,7 +148,7 @@ def list_pdfs_in_drive_folder(drive_client, folder_id: str) -> pd.DataFrame:
         return pd.DataFrame(columns=["Name", "ID", "URL"])
 
 
-def fetch_pdf_from_drive(drive_client, file_id):
+def fetch_pdf_from_drive(drive_client: DriveClient, file_id):
     """
     Download a PDF file from Google Drive into memory as BytesIO.
     Returns BytesIO object if successful, else None.
@@ -121,23 +167,50 @@ def fetch_pdf_from_drive(drive_client, file_id):
         return None
 
 
-def fetch_sheet(spreadsheet_id) -> pd.DataFrame:
+def fetch_sheet(sheets_client: SheetsClient, spreadsheet_id: str) -> Worksheet | None:
     """
-    Load the first worksheet (index 0) from the spreadsheet and return as a Pandas DataFrame.
+    Fetches the first worksheet from a Google Sheet by ID.
+
+    Args:
+        sheets_client (GSpreadClient): An authenticated gspread client.
+        spreadsheet_id (str): The ID of the Google Spreadsheet.
+
+    Returns:
+        Worksheet: The first worksheet of the spreadsheet.
+        None: If there is an error.
     """
     try:
-        drive_client, sheets_client = get_gcp_clients()
-        sheet = sheets_client.open_by_key(spreadsheet_id).sheet1
-        data = sheet.get_all_records()
-        df = pd.DataFrame(data)
+        return sheets_client.open_by_key(spreadsheet_id).sheet1
+    except Exception as e:
+        logging.error(f"[fetch_sheet] Failed to fetch worksheet: {e}")
+        return None
+    
+
+def fetch_sheet_as_df(sheets_client: SheetsClient, spreadsheet_id: str) -> pd.DataFrame:
+    """
+    Fetches the first worksheet from a Google Sheet by ID and returns its contents as a DataFrame.
+
+    Args:
+        sheets_client (GSpreadClient): An authenticated gspread client.
+        spreadsheet_id (str): The ID of the Google Spreadsheet.
+
+    Returns:
+        pd.DataFrame: DataFrame containing the worksheet data.
+        Returns empty DataFrame on failure.
+    """
+    try:
+        sheet = fetch_sheet(sheets_client, spreadsheet_id)
+        if sheet is None:
+            return pd.DataFrame()
+        df = get_as_dataframe(sheet, evaluate_formulas=True, dtype=str)  # dtype=str prevents unwanted floats
+        df = df.fillna('')  # optional: avoid NaNs if you prefer blank strings
         return df
     except Exception as e:
-        st.error(f"Failed to fetch sheet as DataFrame: {e}")
+        logging.error(f"[fetch_sheet_as_df] Failed to convert worksheet to DataFrame: {e}")
         return pd.DataFrame()
+    
 
-
-
-def upload_file_to_drive(drive_client, file_obj, file_name: str, folder_id: str) -> str:
+def upload_file_to_drive(drive_client: DriveClient, file_obj, file_name: str, folder_id: str) -> str:
     """
     Upload a PDF file to a specified Google Drive folder.
 
@@ -170,7 +243,7 @@ def upload_file_to_drive(drive_client, file_obj, file_name: str, folder_id: str)
         return None
 
 
-def move_file_between_folders(drive_client, file_id, target_folder_id):
+def move_file_between_folders(drive_client: DriveClient, file_id, target_folder_id):
     """
     Move a file to a new folder in Google Drive.
     
@@ -200,25 +273,4 @@ def move_file_between_folders(drive_client, file_id, target_folder_id):
         return False
     
     
-def get_folder_name(drive_client, file_id):
-    """
-    Returns the name of the folder containing the file with the given file_id.
 
-    Args:
-        drive_client: An authenticated Google Drive API client.
-        file_id (str): The ID of the file.
-
-    Returns:
-        str: Name of the parent folder, or "Unknown" if not found.
-    """
-    try:
-        file_metadata = drive_client.files().get(fileId=file_id, fields='parents').execute()
-        parent_ids = file_metadata.get("parents", [])
-        if not parent_ids:
-            return "Unknown"
-
-        folder_metadata = drive_client.files().get(fileId=parent_ids[0], fields='name').execute()
-        return folder_metadata.get("name", "Unknown")
-    except Exception as e:
-        logging.warning(f"Failed to fetch folder name for file ID {file_id}: {e}")
-        return "Unknown"

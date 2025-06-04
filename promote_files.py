@@ -13,19 +13,20 @@ Promotes rows in LIBRARY_UNIFIED with status in ['new_validated', 'clonedlive_va
 import os
 from datetime import datetime, timezone
 import logging
-from admin_config import set_env_vars, RAG_CONFIG
-from google_utils import get_gcp_clients, fetch_pdf_from_drive, move_file_between_folders, fetch_sheet
-from library_utils import validate_core_metadata, validaterows, init_qdrant, is_pdf_id_in_qdrant, pdf_to_Docs_via_pypdf, which_qdrant
-from log_writer import log_admin_event
+from app_config import set_env_vars, RAG_CONFIG
+from google_utils import fetch_pdf_from_drive, move_file_between_folders, fetch_sheet_as_df
+from library_utils import validate_core_metadata, validate_rows, pdf_to_Docs_via_pypdf
+from qdrant_utils import init_qdrant, is_pdf_id_in_qdrant, which_qdrant
+from log_writer import log_event
 
 
 set_env_vars()
-drive_client, sheets_client = get_gcp_clients()
+
 
 TARGET_STATUSES = ["new_validated", "clonedlive_validated"]
 
-def promote_files():
-    library_unified_df = fetch_sheet(os.environ["LIBRARY_UNIFIED"])
+def promote_files(drive_client, sheets_client):
+    library_unified_df = fetch_sheet_as_df(sheets_client, os.environ["LIBRARY_UNIFIED"])
     
     validaterows(sheets_client, library_unified_df)
 
@@ -35,7 +36,7 @@ def promote_files():
 
         pdf_id = row.get("pdf_id")
         file_id = row.get("google_id")
-        filename = row.get("filename")
+        filename = row.get("pdf_file_name")
 
         # Ensure only one validated row exists for this pdf_id
         validated_count = library_unified_df[(library_unified_df["pdf_id"] == pdf_id) & (library_unified_df["status"].isin(TARGET_STATUSES))].shape[0]
@@ -77,9 +78,6 @@ def promote_files():
             body={"values": [list(row.values())]},
         )
 
-        log_admin_event("promoted_to_live", pdf_id, filename)
+        log_event("promoted_to_live", pdf_id, filename)
 
-
-if __name__ == "__main__":
-    promote_files()
     

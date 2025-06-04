@@ -5,7 +5,7 @@ import os
 from dotenv import load_dotenv
 
 # --- Imports ---
-from admin_config import *
+from app_config import *
 import google_utils as goo_utils
 from library_utils import append_rows_to_sheet
 import pandas as pd

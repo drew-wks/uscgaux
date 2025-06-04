@@ -5,7 +5,7 @@ from qdrant_client import QdrantClient
 from datetime import datetime
 
 # utilities
-from admin_config import *
+from app_config import *
 import google_utils as goo_utils
 import library_utils as lib_utils
 

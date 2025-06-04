@@ -1,6 +1,7 @@
 streamlit
 pandas>=2.0.0
 gspread>=5.8.3
+gspread-dataframe
 google-auth
 google-api-python-client
 ipykernel 
@@ -16,6 +17,5 @@ openpyxl
 PyYAML
 requests
 streamlit-authenticator
-streamlit-aggrid
 
 dotenv

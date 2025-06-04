@@ -6,7 +6,7 @@ import streamlit_app as st
 # utilities
 import google_utils as goo_utils
 import library_utils as lib_utils
-from admin_config import *
+from app_config import *
 
 # Qdrant and embeddings
 from qdrant_client import QdrantClient

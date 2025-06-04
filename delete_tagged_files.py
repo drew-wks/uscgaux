@@ -1,9 +1,9 @@
 
 """
-Agent: delete_files.py
+Agent: delete_tagged_files.py
 
 Removes files from system:
-- Finds  rows: LIBRARY_UNIFIED entries whose status contains "deletion"
+- Finds rows: LIBRARY_UNIFIED entries whose status contains "deletion"
 - Finds files: PDFs in PDF_TAGGING or PDF_LIVE with matching pdf_ids in LIBRARY_UNIFIED
 - Finds qdrant records: records in Qdrant with matching pdf_ids in LIBRARY_UNIFIED
 - Deletes rows, files and records 
@@ -13,24 +13,21 @@ Removes files from system:
 import os
 import pandas as pd
 import logging
-from admin_config import set_env_vars, RAG_CONFIG, GOOGLE_CONFIG
-from library_utils import fetch_rows_by_status, delete_qdrant_by_pdf_id, init_qdrant, remove_rows_from_sheet
-from google_utils import get_gcp_clients, get_folder_name
-from log_writer import log_admin_event
+from app_config import set_env_vars, RAG_CONFIG
+from library_utils import fetch_rows_by_status, remove_rows
+from google_utils import get_folder_name, fetch_sheet_as_df
+from qdrant_utils import init_qdrant, delete_qdrant_by_pdf_id
+from log_writer import log_event
 
 
 set_env_vars()
-drive_client, sheets_client = get_gcp_clients()
     
 TARGET_STATUSES = ["deletion"]
 
 
-def delete_files():
+def delete_tagged_files(drive_client, sheets_client):
 
-
-    # Load LIBRARY_UNIFIED
-    sheet = sheets_client.open_by_key(os.environ["LIBRARY_UNIFIED"])
-    df = pd.DataFrame(sheet.worksheet("Sheet1").get_all_records())
+    df = fetch_sheet_as_df(sheets_client, os.environ["LIBRARY_UNIFIED"])
     df["pdf_id"] = df["pdf_id"].astype(str)
     
     
@@ -41,6 +38,7 @@ def delete_files():
         return
 
     pdf_ids_to_delete = rows_to_delete["pdf_id"].astype(str).str.strip().tolist()
+    row_indices_to_delete = df[df["pdf_id"].isin(pdf_ids_to_delete)].index.tolist()
 
 
     # --- Find & Delete FILES ---
@@ -57,7 +55,7 @@ def delete_files():
 
         try:
             drive_client.files().delete(fileId=file_id).execute()
-            log_admin_event(f"file_deleted from {folder_name}", pdf_id, filename)
+            log_event(f"file_deleted from {folder_name}", pdf_id, filename)
         except Exception as e:
             logging.warning(f"Failed to delete file {filename} (ID: {file_id}): {e}")
 
@@ -69,14 +67,12 @@ def delete_files():
 
 
     # --- DELETE ROWS ---
-    row_indices_to_delete = df[df["pdf_id"].isin(pdf_ids_to_delete)].index.tolist()
-    remove_rows_from_sheet(sheets_client, os.environ["LIBRARY_UNIFIED"], row_indices_to_delete)
+    remove_rows(sheets_client, os.environ["LIBRARY_UNIFIED"], row_indices_to_delete)
 
     for _, row in rows_to_delete.iterrows():
         pdf_id = row["pdf_id"]
         filename = row.get("pdf_file_name", "unknown_file.pdf")
-        log_admin_event("row_deleted", pdf_id, filename)
+        log_event("row_deleted", pdf_id, filename)
 
+    return rows_to_delete
 
-if __name__ == "__main__":
-    delete_files()

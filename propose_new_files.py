@@ -4,7 +4,7 @@
 Agent: propose_new_files.py
 
 Triggered when user uploads new files  using the streamlit utility
-- Computes metadata (pdf_id, filename, etc.)
+- Computes metadata (pdf_id, pdf_file_name, etc.)
 - Checks for duplicates in LIBRARY_UNIFIED
 - If unique, appends row to LIBRARY_UNIFIED with status 'new_for_tagging'
 - If duplicate, deletes file from PDF_TAGGING and logs event
@@ -15,17 +15,16 @@ from datetime import datetime, timezone
 import logging
 import os
 import pandas as pd
-from admin_config import set_env_vars
+from app_config import set_env_vars
 from library_utils import compute_pdf_id, safe_append_rows_to_sheet, validate_core_metadata
-from google_utils import get_gcp_clients, upload_file_to_drive, fetch_sheet
-from log_writer import log_admin_event
+from google_utils import upload_file_to_drive, fetch_sheet_as_df
+from log_writer import log_event
 
 
 set_env_vars()
-drive_client, sheets_client = get_gcp_clients()
 
 
-def propose_new_files(uploaded_files):
+def propose_new_files(drive_client, sheets_client, uploaded_files):
     """
     Processes and uploads Streamlit-uploaded PDF files, checking for duplicates and appending metadata.
 
@@ -36,7 +35,7 @@ def propose_new_files(uploaded_files):
         tuple: (new_rows_df, failed_files, duplicate_files)
     """
     
-    library_unified_df = fetch_sheet(os.environ["LIBRARY_UNIFIED"])
+    library_unified_df = fetch_sheet_as_df(sheets_client,os.environ["LIBRARY_UNIFIED"])
     library_unified_df['pdf_id'] = library_unified_df['pdf_id'].astype(str)
 
     failed_files = []
@@ -54,7 +53,7 @@ def propose_new_files(uploaded_files):
 
         if pdf_id in library_unified_df["pdf_id"].values:
             logging.warning(f"Duplicate PDF ID detected: {pdf_id} ({file_name})")
-            log_admin_event("duplicate_skipped", pdf_id, file_name)
+            log_event("duplicate_skipped", pdf_id, file_name)
             duplicate_files.append(file_name)
             continue
         
@@ -72,7 +71,7 @@ def propose_new_files(uploaded_files):
             "status_timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         })
 
-        log_admin_event("new_pdf_to_PDF_TAGGING", pdf_id, file_name)
+        log_event("new_pdf_to_PDF_TAGGING", pdf_id, file_name)
 
     new_rows_df = pd.DataFrame(collected_rows)
 
@@ -80,7 +79,7 @@ def propose_new_files(uploaded_files):
         safe_append_rows_to_sheet(sheets_client, os.environ["LIBRARY_UNIFIED"], new_rows_df)
 
     if not validate_core_metadata(new_rows_df):
-            logging.warning(f"Incomplete metadata for {pdf_id}. Skipping promotion.")
+            logging.warning(f"Incomplete metadata for {file_name}  ID: {pdf_id}. Skipping promotion.")
 
     return new_rows_df, failed_files, duplicate_files
 
