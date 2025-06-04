@@ -2,10 +2,10 @@ import os
 import base64
 import streamlit as st
 st.set_page_config(page_title="ASK Auxiliary Source of Knowledge", initial_sidebar_state="collapsed")
-from app_config import *
+from app_config import set_env_vars
 set_env_vars()
 from library_utils import validate_rows
-from google_utils import init_auth, get_cached_sheets_client, get_cached_drive_client, fetch_sheet_as_df
+from google_utils import get_sheets_client, get_drive_client, fetch_sheet_as_df
 from propose_new_files import propose_new_files
 from cleanup_orphans import find_orphans
 from promote_files import promote_files
@@ -13,9 +13,39 @@ from delete_tagged_files import delete_tagged_files
 import ui_utils
 
 
-init_auth()
-sheets_client = get_cached_sheets_client()
-drive_client = get_cached_drive_client()
+ui_utils.init_auth()
+
+
+@st.cache_resource
+def get_cached_drive_client():
+    creds_info = st.secrets.get("gcp_service_account")
+    if not creds_info:
+        st.error("Missing `[gcp_service_account]` in your secrets.")
+        st.stop()
+    return get_drive_client(creds_info)
+
+@st.cache_resource
+def get_cached_sheets_client():
+    creds_info = st.secrets.get("gcp_service_account")
+    if not creds_info:
+        st.error("Missing `[gcp_service_account]` in your secrets.")
+        st.stop()
+    return get_sheets_client(creds_info)
+
+try:
+    drive_client = get_cached_drive_client()
+except Exception as e:
+    st.error(f"❌ Could not connect to Google Drive: {e}")
+    st.stop()
+
+try:
+    sheets_client = get_cached_sheets_client()
+except Exception as e:
+    st.error(f"❌ Could not connect to Google Sheets: {e}")
+    st.stop()
+
+
+
 ui_utils.apply_styles()
 
 st.write("")

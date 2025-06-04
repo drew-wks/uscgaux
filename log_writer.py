@@ -9,16 +9,13 @@ import os, logging
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 from app_config import set_env_vars
-from google_utils import get_cached_sheets_client, get_cached_drive_client
-
+set_env_vars() 
 
 logging.basicConfig(level=logging.INFO)
 
 
-set_env_vars()  # needed for local testing  
 
-
-def log_event(action, pdf_id, filename, extra_columns=None):
+def log_event(action, pdf_id, filename, sheets_client, event_log_id=None, extra_columns=None):
     """
     Append a single row to the ADMIN_EVENT_LOG tab.
 
@@ -26,8 +23,14 @@ def log_event(action, pdf_id, filename, extra_columns=None):
         action (str): Action type (e.g., 'promoted_to_live')
         pdf_id (str): PDF identifier
         filename (str): Name of the file
+        sheets_client: Authenticated Google Sheets client
+        event_log_id (str): Optional ID of the spreadsheet. Falls back to env var.
         extra_columns: Optional list of extra values.
+        
+    Returns:
+        dict: Logged event with timestamp
     """
+
     event = {
         "action": action,
         "pdf_id": pdf_id,
@@ -35,11 +38,11 @@ def log_event(action, pdf_id, filename, extra_columns=None):
         "extra": extra_columns
     }
 
-    log_events([event]) # type: ignore
+    log_events([event], sheets_client, event_log_id) # type: ignore
     return event
 
 
-def log_events(events):
+def log_events(events, sheets_client, event_log_id=None):
     """
     Append multiple rows to the ADMIN_EVENT_LOG tab and return the timestamped events.
 
@@ -51,6 +54,8 @@ def log_events(events):
                 "pdf_file_name": str,
                 "extra": optional list of additional values
             }
+        sheets_client: Authenticated Google Sheets client
+        event_log_id (str): Optional ID of the spreadsheet. Falls back to env var.
 
     Returns:
         List[dict]: Timestamped event dictionaries.
@@ -58,8 +63,8 @@ def log_events(events):
     logged_events = []
 
     try:
-        sheets_client = get_cached_sheets_client()
-        ws = sheets_client.open_by_key(os.environ["EVENT_LOG"]).worksheet("Sheet1")
+        spreadsheet_id = event_log_id or os.environ["EVENT_LOG"]
+        ws = sheets_client.open_by_key(spreadsheet_id).worksheet("Sheet1")
 
         rows = []
         for e in events:
@@ -92,7 +97,7 @@ def log_events(events):
 
 
 def print_log_link():
-    log_sheet_id = os.environ["EVENT_LOG"]
+    log_sheet_id = os.environ.get("EVENT_LOG", "missing_env_var")
     log_url = f"https://docs.google.com/spreadsheets/d/{log_sheet_id}"
     logging.info(f"📄 Admin event log written to: {log_url}")
 

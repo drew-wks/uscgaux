@@ -1,11 +1,11 @@
-#  Utilities for Google Drive authentication and file management
+#  Utilities for Google Drive file management
 
 import os
 import logging
+import json
 import streamlit as st
 from io import BytesIO
 import pandas as pd
-from typing import overload, Literal, Union, Tuple
 import gspread
 from gspread_dataframe import get_as_dataframe
 from gspread.client import Client as SheetsClient
@@ -14,52 +14,29 @@ from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build, Resource as DriveClient
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
-from streamlit_authenticator import Authenticate
+
+from app_config import set_env_vars
+set_env_vars()
+
+def get_gcp_credentials():
+    if os.getenv("GOOGLE_CREDENTIALS_INLINE") == "true":
+        # Loaded from Streamlit secrets
+        from streamlit import secrets
+        return Credentials.from_service_account_info(secrets["gcp_service_account"])
+
+    # Otherwise load from local JSON file
+    path = os.getenv("GOOGLE_CREDENTIALS_PATH_FOR_STREAMLIT_USCGAUX_APP")
+    if not path or not os.path.exists(path):
+        raise FileNotFoundError(f"GCP credentials file not found or path {path} missing.")
+
+    with open(path) as f:
+        info = json.load(f)
+    return Credentials.from_service_account_info(info)
 
 
-def init_auth():
-    """Gate the app behind Google OAuth2 via streamlit-authenticator."""
-    #    (authenticator needs to be able to mutate this, so we can't give it st.secrets directly)
-    
-    #   Google policy is OAuth clients that have remained inactive for six months will be automatically deleted. Inactivity is 
-    #   determined based on the absence of token exchanges or client updates.
-    
-    if os.getenv("TESTING_LOCALLY") == "true":
-        return  # Skip auth when testing locally. Run & Debug launch.json is set to look for this switch
-    
-    credentials_conf = {
-        "usernames": {},  
-        "preauthorized": st.secrets.get("credentials", {}).get("preauthorized", {})
-    }
-
-    # 2) Pull cookie settings & OAuth2 config from st.secrets
-    cookie_conf = st.secrets.get("cookie", {})
-    oauth2_conf = st.secrets["oauth2"]
-
-    auth = Authenticate(
-        credentials=credentials_conf,
-        cookie_name=cookie_conf.get("name"),
-        key=cookie_conf.get("key"),
-        expiry_days=cookie_conf.get("expiry_days"),
-        preauthorized=credentials_conf["preauthorized"],
-    )
-    if not st.session_state.get("name"):
-        auth.experimental_guest_login(
-            button_name="🔒 Login with Google",
-            provider="google",
-            oauth2=oauth2_conf,
-            location="main",
-        )
-        st.stop()
-    st.sidebar.write(f"👤 Hello, {st.session_state['name']}")
-
-
-def get_sheets_client() -> gspread.Client:
-    creds_info = st.secrets.get("gcp_service_account")
+def get_sheets_client(creds_info: dict) -> SheetsClient:
     if not creds_info:
-        st.error("Missing `[gcp_service_account]` in your secrets.")
-        st.stop()
-
+        raise ValueError("Missing service account credentials.")
     scopes = [
         "https://spreadsheets.google.com/feeds",
         "https://www.googleapis.com/auth/drive",
@@ -68,31 +45,17 @@ def get_sheets_client() -> gspread.Client:
     return gspread.authorize(creds)
 
 
-@st.cache_resource
-def get_cached_sheets_client() -> gspread.Client:
-    """Return cached versions (sheets_client, drive_client) using your service-account in secrets."""
-    return get_sheets_client()
 
-
-def get_drive_client() -> DriveClient:
-    creds_info = st.secrets.get("gcp_service_account")
+def get_drive_client(creds_info: dict) -> DriveClient:
     if not creds_info:
-        st.error("Missing `[gcp_service_account]` in your secrets.")
-        st.stop()
-
-
+        raise ValueError("Missing service account credentials.")
     scopes = ["https://www.googleapis.com/auth/drive"]
     creds = Credentials.from_service_account_info(creds_info, scopes=scopes)
     return build("drive", "v3", credentials=creds)
 
 
-@st.cache_resource
-def get_cached_drive_client() -> DriveClient:
-    """Return cached versions (sheets_client, drive_client) using your service-account in secrets."""
-    return get_drive_client() 
 
-
-def get_folder_name(drive_client: DriveClient, file_id):
+def get_folder_name(drive_client: DriveClient, file_id: str) -> str:
     """
     Returns the name of the folder containing the file with the given file_id.
 
@@ -202,9 +165,8 @@ def fetch_sheet_as_df(sheets_client: SheetsClient, spreadsheet_id: str) -> pd.Da
         sheet = fetch_sheet(sheets_client, spreadsheet_id)
         if sheet is None:
             return pd.DataFrame()
-        df = get_as_dataframe(sheet, evaluate_formulas=True, dtype=str)  # dtype=str prevents unwanted floats
-        df = df.fillna('')  # optional: avoid NaNs if you prefer blank strings
-        return df
+        data = sheet.get_all_records()
+        return pd.DataFrame(data)
     except Exception as e:
         logging.error(f"[fetch_sheet_as_df] Failed to convert worksheet to DataFrame: {e}")
         return pd.DataFrame()

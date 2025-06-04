@@ -22,30 +22,76 @@ GOOGLE_CONFIG = {
     "LIBRARY_CATALOG_ID": "16F5tRIvuHncofRuXCsQ20A7utZWRuEgA2bvj4nQQjek",  # a Google Sheet
 }
 
-# Set runtime environment: local (true) vs. streamlit community cloud (falses)
-TESTING_LOCALLY = "true"
+"""
+--- STREAMLIT RUNTIME SWITCHES ---
 
-# --- Config Qdrant here because don't import streamlit in library_utils---
+Purpose:
+This module reads environment switches that help your app distinguish between running in Streamlit (e.g., UI mode) vs. local scripts (e.g., testing, CLI).
+
+✅ Define these in your `.env` file for local development.
+🚫 DO NOT include these in your Streamlit Community Cloud secrets — they are inferred there.
+
+--- Switches ---
+
+1. RUN_CONTEXT
+    Set this to:
+    - "streamlit" → for Streamlit UI (uses st.secrets and decorators)
+    - "cli"       → for local/testing (uses .env and skips Streamlit features)
+
+    Example:
+        RUN_CONTEXT=streamlit
+
+2. FORCE_USER_AUTH
+    Controls whether authentication is required.
+    Useful for bypassing login in local dev or test flows.
+
+    Example:
+        FORCE_USER_AUTH=false
+
+--- Behavior ---
+- If RUN_CONTEXT is not defined, defaults to "streamlit"
+- If FORCE_USER_AUTH is not defined, defaults to True when in Streamlit
+"""
+
+
+
+# Reads the run context value from the environment. If not found, defaults to 'streamlit'
+RUN_CONTEXT = os.getenv("RUN_CONTEXT", "streamlit").lower()
+logging.info(f"Running in context: {RUN_CONTEXT.upper()}")
+
+# Reads the auth value from the environment. If not found, defaults to 'true'
+FORCE_USER_AUTH = os.getenv("FORCE_USER_AUTH", "true").lower() == "true"
+logging.info(f"Force authentication: {FORCE_USER_AUTH}")
+
+# --- Now you can define the environmental variables which all the code uses ---
 def set_env_vars():
-    # Set runtime environment
-    os.environ["TESTING_LOCALLY"] = TESTING_LOCALLY
-   
-    # Set Google destinations
+    
+    ENV_FILE = "/Users/drew_wilkins/Drews_Files/Drew/Python/Localcode/.env"
+    
+    # Try loading .env (only if running in CLI mode)
+    if os.path.exists(ENV_FILE):
+        load_dotenv(dotenv_path=ENV_FILE)
+    else:
+        logging.info(f"No local .env file found at {ENV_FILE}. Assuming Streamlit Community Cloud.")
+
+
+    os.environ["RUN_CONTEXT"] = RUN_CONTEXT
+    os.environ["FORCE_USER_AUTH"] = str(FORCE_USER_AUTH).lower()
+    os.environ["QDRANT_PATH"] = "/Users/drew_wilkins/Drews_Files/Drew/Python/Localcode/Drews_Tools/qdrant_ASK_lib_tools/qdrant_db"
+
+
     for key, value in GOOGLE_CONFIG.items():
         os.environ[key] = value
-    
-    # Set Qdrant configurations
-    os.environ["QDRANT_PATH"] = "/Users/drew_wilkins/Drews_Files/Drew/Python/Localcode/Drews_Tools/qdrant_ASK_lib_tools/qdrant_db"
-    load_dotenv("/Users/drew_wilkins/Drews_Files/Drew/Python/Localcode/.env")  # needed for local testing
-    try:
-        import streamlit as st
-        os.environ["QDRANT_URL"] = st.secrets["QDRANT_URL"]
-        os.environ["QDRANT_API_KEY"] = st.secrets["QDRANT_API_KEY"]
-    except ModuleNotFoundError:
-        logging.info("Streamlit not available — skipping st.secrets.")
-    except Exception as e:
-        logging.info(f"Could not load Streamlit secrets: {e}")
 
+    if RUN_CONTEXT == "streamlit":
+        try:
+            import streamlit as st
+            for key, value in st.secrets.items():
+                if key not in os.environ:
+                    os.environ[key] = str(value)
+                    logging.info(f"Loaded Streamlit secret: {key}")
+        except Exception as e:
+            logging.warning(f"Failed to load Streamlit secrets: {e}")
 
 
 

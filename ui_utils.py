@@ -6,9 +6,47 @@ import pandas as pd
 from pathlib import Path
 from fnmatch import fnmatch
 import re
-
+from streamlit_authenticator import Authenticate
 
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+
+def init_auth():
+    """Gate the app behind Google OAuth2 via streamlit-authenticator."""
+    #    (authenticator needs to be able to mutate this, so we can't give it st.secrets directly)
+    
+    #   Google policy is OAuth clients that have remained inactive for six months will be automatically deleted. Inactivity is 
+    #   determined based on the absence of token exchanges or client updates.
+    
+    if os.getenv("FORCE_USER_AUTH") == "false":
+        return  # Skip auth when testing locally. Run & Debug launch.json is set to look for this switch
+    
+    credentials_conf = {
+        "usernames": {},  
+        "preauthorized": st.secrets.get("credentials", {}).get("preauthorized", {})
+    }
+
+    # 2) Pull cookie settings & OAuth2 config from st.secrets
+    cookie_conf = st.secrets.get("cookie", {})
+    oauth2_conf = st.secrets["oauth2"]
+
+    auth = Authenticate(
+        credentials=credentials_conf,
+        cookie_name=cookie_conf.get("name"),
+        key=cookie_conf.get("key"),
+        expiry_days=cookie_conf.get("expiry_days"),
+        preauthorized=credentials_conf["preauthorized"],
+    )
+    if not st.session_state.get("name"):
+        auth.experimental_guest_login(
+            button_name="🔒 Login with Google",
+            provider="google",
+            oauth2=oauth2_conf,
+            location="main",
+        )
+        st.stop()
+    st.sidebar.write(f"👤 Hello, {st.session_state['name']}")
 
 
 # Hide Streamlit's default UI elements: Main menu, footer, and header

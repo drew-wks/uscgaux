@@ -14,13 +14,13 @@ import os
 import pandas as pd
 import logging
 from app_config import set_env_vars, RAG_CONFIG
+set_env_vars()
 from library_utils import fetch_rows_by_status, remove_rows
 from google_utils import get_folder_name, fetch_sheet_as_df
 from qdrant_utils import init_qdrant, delete_qdrant_by_pdf_id
 from log_writer import log_event
 
 
-set_env_vars()
     
 TARGET_STATUSES = ["deletion"]
 

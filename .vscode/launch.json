@@ -9,7 +9,7 @@
             "args": ["run", "${file}"],
             "cwd": "${workspaceFolder}",
             "env": {
-                    "TESTING_LOCALLY": "true"
+                    "FORCE_USER_AUTH": "false"
       },
       "console": "integratedTerminal"
         },

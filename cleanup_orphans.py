@@ -8,15 +8,12 @@ import os
 import pandas as pd
 import logging
 from google_utils import list_pdfs_in_drive_folder, fetch_sheet, fetch_sheet_as_df
-from app_config import set_env_vars
 from log_writer import log_events
 
 
 
 
-set_env_vars()
-
-def find_orphans(drive_client, sheets_client):
+def find_orphans(drive_client, sheets_client) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Identify and flag orphan records and files across LIBRARY_UNIFIED and Google Drive folders.
     
