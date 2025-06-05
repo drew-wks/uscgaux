@@ -2,11 +2,6 @@ import os
 import logging
 import uuid
 from datetime import datetime, timezone
-from googleapiclient.http import MediaIoBaseDownload
-from googleapiclient.errors import HttpError
-from qdrant_client import QdrantClient
-from qdrant_client.http import models, exceptions as qdrant_exceptions
-from google_utils import fetch_sheet_as_df, GOOGLE_CONFIG
 from log_writer import log_event
 import pandas as pd
 from pypdf import PdfReader
@@ -310,11 +305,12 @@ def validate_rows(sheets_client):
                 "issues": row_with_issues["issues"]
             })
 
-    logging.info(f"✅ Found {len(valid_df)} valid rows in LIBRARY_UNIFIED.")
-     logging.info(f"⚠️ Found {len(invalid_df)} invalid rows in LIBRARY_UNIFIED.")
     valid_df = pd.DataFrame(valid_rows)
     invalid_df = pd.DataFrame(invalid_rows)
     log_df = pd.DataFrame(log_entries)
+    
+    logging.info(f"✅ Found {len(valid_df)} valid rows in LIBRARY_UNIFIED.")
+    logging.info(f"⚠️ Found {len(invalid_df)} invalid rows in LIBRARY_UNIFIED.")
 
 
     # Reorder columns so that 'issues' comes first

@@ -14,16 +14,13 @@ import os
 import logging
 from datetime import datetime, timezone
 import pandas as pd
-from google_utils import move_pdf, fetch_sheet
+from gcp_utils import move_pdf, fetch_sheet
 from library_utils import safe_append_rows_to_sheet, remove_row
-from env_config import set_env_vars
 from log_writer import log_event
 
 
-set_env_vars() # needed for local testing
 
-
-def archive_live(drive_client, sheets_client):
+def archive_live(drive_client: DriveClient, sheets_client: SheetsClient):
 
     try:
         library_unified_df = fetch_sheet(sheets_client, os.environ["LIBRARY_UNIFIED"])

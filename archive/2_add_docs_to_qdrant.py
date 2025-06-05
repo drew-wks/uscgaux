@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 import streamlit_app as st
 
 # utilities
-import google_utils as goo_utils
+import gcp_utils as goo_utils
 import library_utils as lib_utils
 from env_config import *
 

@@ -15,8 +15,8 @@ import pandas as pd
 import logging
 from env_config import RAG_CONFIG
 from library_utils import fetch_rows_by_status, remove_rows
-from google_utils import get_folder_name, fetch_sheet_as_df
-from qdrant_utils import init_qdrant, delete_record_by_pdf_id
+from gcp_utils import get_folder_name, fetch_sheet_as_df
+from qdrant_utils import get_qdrant_client, delete_record_by_pdf_id
 from log_writer import log_event
 
 
@@ -24,7 +24,7 @@ from log_writer import log_event
 TARGET_STATUSES = ["deletion"]
 
 
-def delete_tagged(drive_client, sheets_client):
+def delete_tagged(drive_client: DriveClient, sheets_client: SheetsClient):
 
     df = fetch_sheet_as_df(sheets_client, os.environ["LIBRARY_UNIFIED"])
     df["pdf_id"] = df["pdf_id"].astype(str)
@@ -60,7 +60,7 @@ def delete_tagged(drive_client, sheets_client):
 
 
     # --- Find & Delete RECORDS ---
-    qdrant_client = init_qdrant(RAG_CONFIG["qdrant_location"])
+    qdrant_client = get_qdrant_client(RAG_CONFIG["qdrant_location"])
     for pdf_id in pdf_ids_to_delete:
         delete_record_by_pdf_id(qdrant_client, RAG_CONFIG.get("qdrant_collection_name"), pdf_id)
 

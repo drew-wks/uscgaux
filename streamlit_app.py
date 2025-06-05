@@ -1,11 +1,13 @@
 import os
 import base64
 import streamlit as st
-st.set_page_config(page_title="ASK Auxiliary Source of Knowledge", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="ASK Auxiliary Source of Knowledge",
+                   initial_sidebar_state="collapsed")
 from env_config import set_env_vars
 set_env_vars()
 from library_utils import validate_rows
-from google_utils import get_sheets_client, get_drive_client, fetch_sheet_as_df
+from gcp_utils import get_sheets_client, get_drive_client, fetch_sheet_as_df
+from qdrant_utils import get_qdrant_client
 from propose_new_files import propose_new_files
 from find_orphans import find_orphans
 from promote_files import promote_files
@@ -24,6 +26,7 @@ def get_cached_drive_client():
         st.stop()
     return get_drive_client(creds_info)
 
+
 @st.cache_resource
 def get_cached_sheets_client():
     creds_info = st.secrets.get("gcp_service_account")
@@ -31,6 +34,16 @@ def get_cached_sheets_client():
         st.error("Missing `[gcp_service_account]` in your secrets.")
         st.stop()
     return get_sheets_client(creds_info)
+
+
+@st.cache_resource
+def get_cached_qdrant_client():
+    location = st.secrets.get("qdrant_location")
+    if not location:
+        st.error("Missing `qdrant_location` in your secrets.")
+        st.stop()
+    return get_qdrant_client(location)
+
 
 try:
     drive_client = get_cached_drive_client()
@@ -44,7 +57,12 @@ except Exception as e:
     st.error(f"❌ Could not connect to Google Sheets: {e}")
     st.stop()
 
-
+try:
+    qdrant_client = get_cached_qdrant_client()
+except Exception as e:
+    st.error(f"❌ Could not connect to Qdrant: {e}")
+    st.stop()
+    
 
 ui_utils.apply_styles()
 
@@ -61,10 +79,12 @@ tabs = st.tabs([
 
 with tabs[0]:
     st.write("")
-    uploaded_files = st.file_uploader("Choose PDF files to propose", type="pdf", accept_multiple_files=True)
+    uploaded_files = st.file_uploader(
+        "Choose PDF files to propose", type="pdf", accept_multiple_files=True)
     if uploaded_files:
         with st.spinner("Uploading & scanning PDFs for duplicates..."):
-            new_rows_df, failed_files, duplicate_files = propose_new_files(drive_client, sheets_client, uploaded_files)
+            new_rows_df, failed_files, duplicate_files = propose_new_files(
+                drive_client, sheets_client, uploaded_files)
         if not new_rows_df.empty:
             st.success("Added new PDF(s)...")
             st.dataframe(new_rows_df)
@@ -77,7 +97,7 @@ with tabs[0]:
 
 
 with tabs[1]:
-    st.write("")    
+    st.write("")
     # Step 1
     with st.container():
         st.markdown("**Step 1. Review proposed PDFs in `PDF_TAGGING`**")
@@ -105,9 +125,11 @@ with tabs[1]:
                 if rows_to_delete is None or rows_to_delete.empty:
                     st.info("No flagged rows found.")
                 else:
-                    st.success("✅ Rows flagged for deletion were removed from `LIBRARY_UNIFIED`, `PDF_TAGGING`/`PDF_LIVE` and Qdrant.")
-                    st.dataframe(rows_to_delete.reset_index(drop=True).rename(lambda x: x + 1, axis="index"))
-            
+                    st.success(
+                        "✅ Rows flagged for deletion were removed from `LIBRARY_UNIFIED`, `PDF_TAGGING`/`PDF_LIVE` and Qdrant.")
+                    st.dataframe(rows_to_delete.reset_index(
+                        drop=True).rename(lambda x: x + 1, axis="index"))
+
     # Step 4
     with st.container():
         st.markdown("**Step 4. Validate rows in LIBRARY_UNIFIED**")
@@ -122,7 +144,7 @@ with tabs[1]:
                     if not invalid_df.empty:
                         st.write("⚠️ Invalid rows found in LIBRARY_UNIFIED")
                         st.dataframe(invalid_df)
-                        
+
     # Step 5
     with st.container():
         st.markdown("**Step 5. Check for orphan rows and PDFs**")
@@ -130,7 +152,8 @@ with tabs[1]:
         with content_col:
             if st.button("Find orphans", key="find_orphans", type="secondary"):
                 with st.spinner("Searching rows, PDFs, and records..."):
-                    orphan_rows_df, orphan_files_df, log_output = find_orphans(drive_client, sheets_client) # type: ignore
+                    orphan_rows_df, orphan_files_df, log_output = find_orphans(
+                        drive_client, sheets_client)  # type: ignore
                 if orphan_rows_df.empty and orphan_files_df.empty:
                     st.success("✅ No orphans found.")
                 else:
@@ -145,30 +168,35 @@ with tabs[1]:
         st.markdown("**Step 6. Promote new files to production**")
         indent_col, content_col = st.columns([0.05, 0.95])
         with content_col:
-            dry_run = st.checkbox("Optional: test functionality without uploading")
+            dry_run = st.checkbox(
+                "Optional: test functionality without uploading")
             os.environ["DRY_RUN"] = str(dry_run)
             if st.button("Promote PDFs", key="promote_pdfs", type="secondary"):
                 with st.spinner("Promoting PDFs..."):
                     promote_files(drive_client, sheets_client)
                 st.success("✅ Files promoted")
-    
-    
+
+
 with tabs[2]:
     st.write("")
     TARGET_STATUSES = ["live"]
-    library_unified_df = fetch_sheet_as_df(sheets_client, os.environ["LIBRARY_UNIFIED"])
+    library_unified_df = fetch_sheet_as_df(
+        sheets_client, os.environ["LIBRARY_UNIFIED"])
     if library_unified_df is None or library_unified_df.empty:
         st.warning("⚠️ LIBRARY_UNIFIED sheet is empty or not accessible.")
         library_unified_df = None
         num_items_library = 0
-        num_live_items_library = 0  
-    else: 
+        num_live_items_library = 0
+    else:
         num_items_library = len(library_unified_df)
-        library_unified_df["status"] = library_unified_df["status"].astype(str).str.strip().str.lower()
+        library_unified_df["status"] = library_unified_df["status"].astype(
+            str).str.strip().str.lower()
         target_statuses = [s.lower() for s in TARGET_STATUSES]
-        num_live_items_library = library_unified_df["status"].isin(target_statuses).sum()
-        
-    st.markdown(f"**Unified Library:** {num_live_items_library} live items out of {num_items_library} total.")
+        num_live_items_library = library_unified_df["status"].isin(
+            target_statuses).sum()
+
+    st.markdown(
+        f"**Unified Library:** {num_live_items_library} live items out of {num_items_library} total.")
 
     st.dataframe(
         library_unified_df,
@@ -188,13 +216,16 @@ with tabs[3]:
     try:
         if qdrant_df is not None:
             num_items_qdrant = len(qdrant_df)
-            st.markdown(f"**Qdrant DB:** {num_items_qdrant} items. Last update: {last_update_date}")  
+            st.markdown(
+                f"**Qdrant DB:** {num_items_qdrant} items. Last update: {last_update_date}")
 
             # Display the DataFrame
-            st.data_editor(qdrant_df, use_container_width=True, hide_index=False, disabled=True)
+            st.data_editor(qdrant_df, use_container_width=True,
+                           hide_index=False, disabled=True)
             isim = f'ASK_catalog_export{last_update_date}.csv'
             indir = qdrant_df.to_csv(index=False)
-            b64 = base64.b64encode(indir.encode(encoding='utf-8')).decode(encoding='utf-8')  
+            b64 = base64.b64encode(indir.encode(
+                encoding='utf-8')).decode(encoding='utf-8')
             linko_final = f'<a href="data:file/csv;base64,{b64}" download="{isim}">Click to download the catalog</a>'
             st.markdown(linko_final, unsafe_allow_html=True)
         else:

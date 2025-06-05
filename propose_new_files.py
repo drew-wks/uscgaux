@@ -11,13 +11,12 @@ Triggered when user uploads new files  using the streamlit utility
 """
 
 
+import os
 from datetime import datetime, timezone
 import logging
-import os
 import pandas as pd
-from env_config import set_env_vars
 from library_utils import compute_pdf_id, safe_append_rows_to_sheet, validate_core_metadata
-from google_utils import upload_pdf, fetch_sheet_as_df
+from gcp_utils import upload_pdf, fetch_sheet_as_df
 from log_writer import log_event
 
 

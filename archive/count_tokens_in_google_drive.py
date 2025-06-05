@@ -24,7 +24,7 @@ import tiktoken
 from dotenv import load_dotenv
 
 from env_config import *
-import google_utils as goo_utils
+import gcp_utils as goo_utils
 
 # ── Logging & env ────────────────────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO,

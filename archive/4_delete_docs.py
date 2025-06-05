@@ -6,7 +6,7 @@ from datetime import datetime
 
 # utilities
 from env_config import *
-import google_utils as goo_utils
+import gcp_utils as goo_utils
 import library_utils as lib_utils
 
 load_dotenv(ENV_PATH)  # needed for local testing

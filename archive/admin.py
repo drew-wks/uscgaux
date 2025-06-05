@@ -5,7 +5,7 @@ import base64
 import pandas as pd
 from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
 from env_config import *
-import google_utils as goo_utils
+import gcp_utils as goo_utils
 import ui_utils
 import input_form
 

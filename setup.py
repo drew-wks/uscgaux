@@ -7,9 +7,9 @@ from setuptools import setup
 setup(
     name="uscgaux",
     version="0.1.0",
-    py_modules=["google_utils"],
+    py_modules=["gcp_utils"],
     install_requires=[
-        # dependencies for google_utils.py
+        # dependencies for gcp_utils.py
         "pandas",
         "gspread>=5.8.3",
         "google-api-python-client",

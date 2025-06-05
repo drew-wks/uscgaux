@@ -13,14 +13,11 @@ Promotes rows in LIBRARY_UNIFIED with status in ['new_validated', 'clonedlive_va
 import os
 from datetime import datetime, timezone
 import logging
-from env_config import set_env_vars, RAG_CONFIG
-from google_utils import fetch_pdf, move_pdf, fetch_sheet_as_df
+from env_config import RAG_CONFIG
+from gcp_utils import fetch_pdf, move_pdf, fetch_sheet_as_df
 from library_utils import validate_core_metadata, validate_rows, pdf_to_Docs_via_pypdf
-from qdrant_utils import init_qdrant, which_qdrant, in_qdrant
+from qdrant_utils import get_qdrant_client, which_qdrant, in_qdrant
 from log_writer import log_event
-
-
-set_env_vars()
 
 
 TARGET_STATUSES = ["new_validated", "clonedlive_validated"]
@@ -49,7 +46,7 @@ def promote_files(drive_client, sheets_client):
             logging.warning(f"Incomplete metadata for {pdf_id}. Skipping promotion.")
             continue
         
-        qdrant_client = init_qdrant(RAG_CONFIG["qdrant_location"])
+        qdrant_client = get_qdrant_client(RAG_CONFIG["qdrant_location"])
 
         # Confirm pdf_id is not already in Qdrant
         if in_qdrant(qdrant_client, RAG_CONFIG, pdf_id):

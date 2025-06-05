@@ -8,7 +8,7 @@ from log_writer import log_event
 
 
 
-def init_qdrant(mode: str = "cloud") -> QdrantClient:
+def get_qdrant_client(mode: str = "cloud") -> QdrantClient:
     mode = mode.lower()
     logging.info(mode)
     if mode == "cloud":
@@ -140,6 +140,38 @@ def check_record_exists(record_id: Union[str, int], client: QdrantClient, collec
     except Exception as e:
         logging.warning(f"Error checking record existence in Qdrant: {e}")
         return False
+
+
+def get_all_pdf_ids_in_qdrant(client: QdrantClient, collection_name: str) -> List[str]:
+    """
+    Retrieve a list of all unique pdf_ids stored in the Qdrant collection.
+
+    Args:
+        client: Qdrant client instance.
+        collection_name: Name of the collection.
+
+    Returns:
+        List of unique pdf_ids found in the Qdrant collection.
+    """
+    try:
+        response = client.scroll(
+            collection_name=collection_name,
+            scroll_filter=None,
+            with_payload=True,
+            with_vectors=False,
+            limit=10000  # Adjust based on expected size
+        )
+        pdf_ids = set()
+        for point in response[0]:
+            metadata = point.payload.get("metadata", {}) or point.payload
+            pdf_id = metadata.get("pdf_id")
+            if pdf_id:
+                pdf_ids.add(str(pdf_id))
+        logging.info(f"Retrieved {len(pdf_ids)} unique pdf_ids from Qdrant")
+        return list(pdf_ids)
+    except Exception as e:
+        logging.error(f"Error retrieving pdf_ids from Qdrant: {e}")
+        return []
 
 
 

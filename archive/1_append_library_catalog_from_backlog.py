@@ -5,8 +5,8 @@ import pandas as pd
 from datetime import datetime
 
 # Utilities
-import google_utils as goo_utils
-from google_utils import fetch_sheet_from_drive
+import gcp_utils as goo_utils
+from gcp_utils import fetch_sheet_from_drive
 import library_utils as lib_utils
 from env_config import *
 
