@@ -1,6 +1,6 @@
 
 """
-Agent: delete_tagged_files.py
+Agent: delete_tagged.py
 
 Removes files from system:
 - Finds rows: LIBRARY_UNIFIED entries whose status contains "deletion"
@@ -13,11 +13,10 @@ Removes files from system:
 import os
 import pandas as pd
 import logging
-from app_config import set_env_vars, RAG_CONFIG
-set_env_vars()
+from env_config import RAG_CONFIG
 from library_utils import fetch_rows_by_status, remove_rows
 from google_utils import get_folder_name, fetch_sheet_as_df
-from qdrant_utils import init_qdrant, delete_qdrant_by_pdf_id
+from qdrant_utils import init_qdrant, delete_record_by_pdf_id
 from log_writer import log_event
 
 
@@ -25,7 +24,7 @@ from log_writer import log_event
 TARGET_STATUSES = ["deletion"]
 
 
-def delete_tagged_files(drive_client, sheets_client):
+def delete_tagged(drive_client, sheets_client):
 
     df = fetch_sheet_as_df(sheets_client, os.environ["LIBRARY_UNIFIED"])
     df["pdf_id"] = df["pdf_id"].astype(str)
@@ -63,7 +62,7 @@ def delete_tagged_files(drive_client, sheets_client):
     # --- Find & Delete RECORDS ---
     qdrant_client = init_qdrant(RAG_CONFIG["qdrant_location"])
     for pdf_id in pdf_ids_to_delete:
-        delete_qdrant_by_pdf_id(qdrant_client, RAG_CONFIG.get("qdrant_collection_name"), pdf_id)
+        delete_record_by_pdf_id(qdrant_client, RAG_CONFIG.get("qdrant_collection_name"), pdf_id)
 
 
     # --- DELETE ROWS ---

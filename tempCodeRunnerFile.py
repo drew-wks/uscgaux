@@ -1,1 +1,1 @@
-from app_config import *
+from env_config import *

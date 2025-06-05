@@ -15,9 +15,9 @@ from datetime import datetime, timezone
 import logging
 import os
 import pandas as pd
-from app_config import set_env_vars
+from env_config import set_env_vars
 from library_utils import compute_pdf_id, safe_append_rows_to_sheet, validate_core_metadata
-from google_utils import upload_file_to_drive, fetch_sheet_as_df
+from google_utils import upload_pdf, fetch_sheet_as_df
 from log_writer import log_event
 
 
@@ -59,7 +59,7 @@ def propose_new_files(drive_client, sheets_client, uploaded_files):
         
         # Upload to Drive
         uploaded_file.seek(0)  # Ensure pointer is at the start
-        file_id = upload_file_to_drive(drive_client, uploaded_file, file_name, os.environ["PDF_TAGGING"])
+        file_id = upload_pdf(drive_client, uploaded_file, file_name, os.environ["PDF_TAGGING"])
         file_link = f"https://drive.google.com/file/d/{file_id}/view"
 
         collected_rows.append({

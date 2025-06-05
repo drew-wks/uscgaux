@@ -8,7 +8,7 @@ from datetime import datetime
 import google_utils as goo_utils
 from google_utils import fetch_sheet_from_drive
 import library_utils as lib_utils
-from app_config import *
+from env_config import *
 
 load_dotenv(ENV_PATH)
 

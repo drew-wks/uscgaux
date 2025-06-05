@@ -7,7 +7,7 @@ Agent: find_orphans.py
 import os
 import pandas as pd
 import logging
-from google_utils import list_pdfs_in_drive_folder, fetch_sheet, fetch_sheet_as_df
+from google_utils import list_pdfs_in_folder, fetch_sheet, fetch_sheet_as_df
 from log_writer import log_events
 
 
@@ -36,7 +36,7 @@ def find_orphans(drive_client, sheets_client) -> tuple[pd.DataFrame, pd.DataFram
     for folder_name in ["PDF_TAGGING", "PDF_LIVE"]:
         folder_id = os.getenv(folder_name)
         logging.info(f"Catalogging {folder_name} for orphan review")
-        files_df = list_pdfs_in_drive_folder(drive_client, folder_id)
+        files_df = list_pdfs_in_folder(drive_client, folder_id)
         files_df["source_folder"] = folder_name
         drive_files.append(files_df)
         
@@ -50,7 +50,7 @@ def find_orphans(drive_client, sheets_client) -> tuple[pd.DataFrame, pd.DataFram
     # --- Orphan ROWS ---
     file_ids_in_drive = set(all_files_df["ID"].astype(str).unique())
     orphan_rows = df[~df["google_id"].astype(str).isin(file_ids_in_drive)]
-    logging.info(f"✅ Found {len(orphan_rows)} orphan rows in LIBRARY_UNIFIED.")
+    logging.info(f"⚠️ Found {len(orphan_rows)} orphan rows in LIBRARY_UNIFIED.")
 
     for _, row in orphan_rows.iterrows():
         pdf_id = row["pdf_id"]
@@ -80,7 +80,7 @@ def find_orphans(drive_client, sheets_client) -> tuple[pd.DataFrame, pd.DataFram
     # --- Orphan FILES ---
     google_ids_in_sheet = set(df["google_id"].astype(str).unique())
     orphan_files = all_files_df[~all_files_df["ID"].astype(str).isin(google_ids_in_sheet)]
-    logging.info(f"✅ Found {len(orphan_files)} orphan files in Google Drive folders.")
+    logging.info(f"⚠️ Found {len(orphan_files)} orphan files in Google Drive folders.")
 
     for _, row in orphan_files.iterrows():
         folder = row.get("source_folder", "unknown_folder")

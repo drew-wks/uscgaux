@@ -1,4 +1,4 @@
-import os, logging
+import os, logging, json
 from dotenv import load_dotenv
 
 
@@ -55,44 +55,45 @@ This module reads environment switches that help your app distinguish between ru
 
 
 
-# Reads the run context value from the environment. If not found, defaults to 'streamlit'
-RUN_CONTEXT = os.getenv("RUN_CONTEXT", "streamlit").lower()
-logging.info(f"Running in context: {RUN_CONTEXT.upper()}")
-
-# Reads the auth value from the environment. If not found, defaults to 'true'
-FORCE_USER_AUTH = os.getenv("FORCE_USER_AUTH", "true").lower() == "true"
-logging.info(f"Force authentication: {FORCE_USER_AUTH}")
-
-# --- Now you can define the environmental variables which all the code uses ---
 def set_env_vars():
-    
+    """
+    Loads environment variables and secrets.
+    Always attempts to load the .env file first to capture overrides like RUN_CONTEXT.
+    """
     ENV_FILE = "/Users/drew_wilkins/Drews_Files/Drew/Python/Localcode/.env"
-    
-    # Try loading .env (only if running in CLI mode)
     if os.path.exists(ENV_FILE):
         load_dotenv(dotenv_path=ENV_FILE)
+        logging.info(f"Loaded local .env file from {ENV_FILE}")
     else:
-        logging.info(f"No local .env file found at {ENV_FILE}. Assuming Streamlit Community Cloud.")
+        logging.info(f"No local .env file found at {ENV_FILE}, assuming Streamlit Cloud")
 
+    # Now read context values from env
+    run_context = os.getenv("RUN_CONTEXT", "streamlit").lower()
+    force_user_auth = os.getenv("FORCE_USER_AUTH", "true").lower() == "true"
 
-    os.environ["RUN_CONTEXT"] = RUN_CONTEXT
-    os.environ["FORCE_USER_AUTH"] = str(FORCE_USER_AUTH).lower()
+    logging.info(f"Running in context: {run_context.upper()}")
+    logging.info(f"Force authentication: {force_user_auth}")
+
+    # Store resolved values into os.environ explicitly
+    os.environ["RUN_CONTEXT"] = run_context
+    os.environ["FORCE_USER_AUTH"] = str(force_user_auth).lower()
     os.environ["QDRANT_PATH"] = "/Users/drew_wilkins/Drews_Files/Drew/Python/Localcode/Drews_Tools/qdrant_ASK_lib_tools/qdrant_db"
-
 
     for key, value in GOOGLE_CONFIG.items():
         os.environ[key] = value
 
-    if RUN_CONTEXT == "streamlit":
+    # Only load Streamlit secrets if explicitly running in Streamlit
+    if run_context == "streamlit":
         try:
             import streamlit as st
             for key, value in st.secrets.items():
-                if key not in os.environ:
+                if isinstance(value, dict):
+                    os.environ[key.upper() + "_JSON_STRING"] = json.dumps(value)
+                    logging.warning("Dicts found and converted to JSON strings")
+                else:
                     os.environ[key] = str(value)
-                    logging.info(f"Loaded Streamlit secret: {key}")
         except Exception as e:
             logging.warning(f"Failed to load Streamlit secrets: {e}")
-
 
 
 RAG_CONFIG = {

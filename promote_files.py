@@ -13,10 +13,10 @@ Promotes rows in LIBRARY_UNIFIED with status in ['new_validated', 'clonedlive_va
 import os
 from datetime import datetime, timezone
 import logging
-from app_config import set_env_vars, RAG_CONFIG
-from google_utils import fetch_pdf_from_drive, move_file_between_folders, fetch_sheet_as_df
+from env_config import set_env_vars, RAG_CONFIG
+from google_utils import fetch_pdf, move_pdf, fetch_sheet_as_df
 from library_utils import validate_core_metadata, validate_rows, pdf_to_Docs_via_pypdf
-from qdrant_utils import init_qdrant, is_pdf_id_in_qdrant, which_qdrant
+from qdrant_utils import init_qdrant, which_qdrant, in_qdrant
 from log_writer import log_event
 
 
@@ -52,12 +52,12 @@ def promote_files(drive_client, sheets_client):
         qdrant_client = init_qdrant(RAG_CONFIG["qdrant_location"])
 
         # Confirm pdf_id is not already in Qdrant
-        if is_pdf_id_in_qdrant(qdrant_client, RAG_CONFIG, pdf_id):
+        if in_qdrant(qdrant_client, RAG_CONFIG, pdf_id):
             logging.warning(f"{pdf_id} already exists in Qdrant. Skipping promotion.")
             continue
 
         # Fetch PDF, extract docs, and send to Qdrant
-        pdf_io = fetch_pdf_from_drive(drive_client, file_id)
+        pdf_io = fetch_pdf(drive_client, file_id)
         docs = pdf_to_Docs_via_pypdf(pdf_io, pdf_id)
         if not docs:
             logging.warning(f"Failed to extract docs for {pdf_id}. Skipping.")
@@ -67,7 +67,7 @@ def promote_files(drive_client, sheets_client):
         qdrant_client.upload_collection_batch(collection_name=RAG_CONFIG["qdrant_collection_name"], documents=docs)
 
         # Move file to LIVE
-        move_file_between_folders(drive_client, file_id, os.environ["PDF_LIVE"])
+        move_pdf(drive_client, file_id, os.environ["PDF_LIVE"])
 
         # Update spreadsheet: status → live
         row["status"] = "live"

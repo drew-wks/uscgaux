@@ -2,14 +2,14 @@ import os
 import base64
 import streamlit as st
 st.set_page_config(page_title="ASK Auxiliary Source of Knowledge", initial_sidebar_state="collapsed")
-from app_config import set_env_vars
+from env_config import set_env_vars
 set_env_vars()
 from library_utils import validate_rows
 from google_utils import get_sheets_client, get_drive_client, fetch_sheet_as_df
 from propose_new_files import propose_new_files
-from cleanup_orphans import find_orphans
+from find_orphans import find_orphans
 from promote_files import promote_files
-from delete_tagged_files import delete_tagged_files
+from delete_tagged import delete_tagged
 import ui_utils
 
 
@@ -101,7 +101,7 @@ with tabs[1]:
         with content_col:
             if st.button("Remove flagged rows", key="remove_rows", type="secondary"):
                 with st.spinner("Searching rows, PDFs, and records..."):
-                    rows_to_delete = delete_tagged_files(drive_client, sheets_client)
+                    rows_to_delete = delete_tagged(drive_client, sheets_client)
                 if rows_to_delete is None or rows_to_delete.empty:
                     st.info("No flagged rows found.")
                 else:

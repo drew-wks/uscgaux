@@ -8,7 +8,7 @@ Provides a reusable logging function for all agents to append entries to EVENT_L
 import os, logging
 from datetime import datetime, timezone
 from dotenv import load_dotenv
-from app_config import set_env_vars
+from env_config import set_env_vars
 set_env_vars() 
 
 logging.basicConfig(level=logging.INFO)
@@ -87,7 +87,7 @@ def log_events(events, sheets_client, event_log_id=None):
         ws.append_rows(rows, value_input_option="USER_ENTERED")
 
         log_url = f"https://docs.google.com/spreadsheets/d/{os.environ['EVENT_LOG']}"
-        logging.info(f"📄 Admin event log written to: {log_url}")
+        logging.info(f"Admin event log written to: {log_url}")
 
     except Exception as e:
         logging.error(f"Failed to append log batch: {e}")

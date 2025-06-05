@@ -1,6 +1,6 @@
 
 """
-Agent: archive_live_files.py
+Agent: archive_live.py
 
 Archives rows with status = 'live_for_deletion':
 - Moves PDF from PDF_LIVE to PDF_ARCHIVE
@@ -14,19 +14,19 @@ import os
 import logging
 from datetime import datetime, timezone
 import pandas as pd
-from google_utils import move_file_between_folders, fetch_sheet_from_drive
+from google_utils import move_pdf, fetch_sheet
 from library_utils import safe_append_rows_to_sheet, remove_row
-from app_config import set_env_vars
+from env_config import set_env_vars
 from log_writer import log_event
 
 
 set_env_vars() # needed for local testing
 
 
-def archive_live_files(drive_client, sheets_client):
+def archive_live(drive_client, sheets_client):
 
     try:
-        library_unified_df = fetch_sheet_from_drive(sheets_client, os.environ["LIBRARY_UNIFIED"])
+        library_unified_df = fetch_sheet(sheets_client, os.environ["LIBRARY_UNIFIED"])
         library_unified_df["pdf_id"] = library_unified_df["pdf_id"].astype(str)
     except Exception as e:
         logging.error(f"Failed to load LIBRARY_UNIFIED: {e}")
@@ -40,7 +40,7 @@ def archive_live_files(drive_client, sheets_client):
         filename = row.get("filename")
 
         try:
-            move_file_between_folders(drive_client, file_id, os.environ["PDF_ARCHIVE"])
+            move_pdf(drive_client, file_id, os.environ["PDF_ARCHIVE"])
         except Exception as e:
             logging.error(f"Failed to move file {file_id}: {e}")
             continue

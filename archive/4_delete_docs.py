@@ -5,7 +5,7 @@ from qdrant_client import QdrantClient
 from datetime import datetime
 
 # utilities
-from app_config import *
+from env_config import *
 import google_utils as goo_utils
 import library_utils as lib_utils
 
@@ -56,7 +56,7 @@ def main():
 
         try:
             # Delete from Qdrant
-            lib_utils.delete_qdrant_by_pdf_id(qdrant_client, CONFIG["qdrant_collection_name"], pdf_id)
+            lib_utils.delete_qdr_by_pdf_id(qdrant_client, CONFIG["qdrant_collection_name"], pdf_id)
 
             # Move file from Live ➔ Deleted
             moved = goo_utils.move_file_between_folders(drive_client, file_id, PDF_ARCHIVE_FOLDER_ID)

@@ -15,44 +15,35 @@ from googleapiclient.discovery import build, Resource as DriveClient
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 
-from app_config import set_env_vars
-set_env_vars()
-
-def get_gcp_credentials():
-    if os.getenv("GOOGLE_CREDENTIALS_INLINE") == "true":
-        # Loaded from Streamlit secrets
-        from streamlit import secrets
-        return Credentials.from_service_account_info(secrets["gcp_service_account"])
-
-    # Otherwise load from local JSON file
-    path = os.getenv("GOOGLE_CREDENTIALS_PATH_FOR_STREAMLIT_USCGAUX_APP")
-    if not path or not os.path.exists(path):
-        raise FileNotFoundError(f"GCP credentials file not found or path {path} missing.")
-
-    with open(path) as f:
-        info = json.load(f)
-    return Credentials.from_service_account_info(info)
+from env_config import GOOGLE_CONFIG
 
 
-def get_sheets_client(creds_info: dict) -> SheetsClient:
-    if not creds_info:
-        raise ValueError("Missing service account credentials.")
-    scopes = [
+def get_gcp_credentials() -> Credentials:
+    """
+    Returns a Google `Credentials` object from a flattened JSON string in the environment.
+    """
+    creds_json = os.getenv("GCP_CREDENTIALS_FOR_STREAMLIT_USCGAUX_APP")
+    if not creds_json:
+        raise EnvironmentError("Missing GCP_CREDENTIALS_FOR_STREAMLIT_USCGAUX_APP in environment.")
+
+    try:
+        creds_dict = json.loads(creds_json)
+        return Credentials.from_service_account_info(creds_dict)
+    except Exception as e:
+        raise ValueError(f"Failed to load GCP credentials from environment: {e}")
+
+
+def get_drive_client(creds: Credentials) -> DriveClient:
+    scoped_creds = creds.with_scopes(["https://www.googleapis.com/auth/drive"])
+    return build("drive", "v3", credentials=scoped_creds)
+
+
+def get_sheets_client(creds: Credentials) -> SheetsClient:
+    scoped_creds = creds.with_scopes([
         "https://spreadsheets.google.com/feeds",
         "https://www.googleapis.com/auth/drive",
-    ]
-    creds = Credentials.from_service_account_info(creds_info, scopes=scopes)
-    return gspread.authorize(creds)
-
-
-
-def get_drive_client(creds_info: dict) -> DriveClient:
-    if not creds_info:
-        raise ValueError("Missing service account credentials.")
-    scopes = ["https://www.googleapis.com/auth/drive"]
-    creds = Credentials.from_service_account_info(creds_info, scopes=scopes)
-    return build("drive", "v3", credentials=creds)
-
+    ])
+    return gspread.authorize(scoped_creds)
 
 
 def get_folder_name(drive_client: DriveClient, file_id: str) -> str:
@@ -79,7 +70,7 @@ def get_folder_name(drive_client: DriveClient, file_id: str) -> str:
         return "Unknown"
 
 
-def list_pdfs_in_drive_folder(drive_client: DriveClient, folder_id: str) -> pd.DataFrame:
+def list_pdfs_in_folder(drive_client: DriveClient, folder_id: str) -> pd.DataFrame:
     """
     Fetch all PDF files from a Google Drive folder into a DataFrame.
     Returns columns: ['Name', 'ID', 'URL'].
@@ -106,12 +97,12 @@ def list_pdfs_in_drive_folder(drive_client: DriveClient, folder_id: str) -> pd.D
         df["URL"] = df["ID"].apply(lambda x: f"https://drive.google.com/file/d/{x}/view")
         return df
     except Exception as e:
-        st.error(f"Could not fetch PDFs from Drive: {e}")
+        logging.error(f"Could not fetch PDFs from Drive: {e}")
         # Return an empty DataFrame with the expected columns
         return pd.DataFrame(columns=["Name", "ID", "URL"])
 
 
-def fetch_pdf_from_drive(drive_client: DriveClient, file_id):
+def fetch_pdf(drive_client: DriveClient, file_id):
     """
     Download a PDF file from Google Drive into memory as BytesIO.
     Returns BytesIO object if successful, else None.
@@ -126,7 +117,7 @@ def fetch_pdf_from_drive(drive_client: DriveClient, file_id):
         fh.seek(0)
         return fh
     except HttpError as e:
-        st.error(f"Failed to download PDF file with ID {file_id}: {e}")
+        logging.error(f"Failed to download PDF file with ID {file_id}: {e}")
         return None
 
 
@@ -172,7 +163,7 @@ def fetch_sheet_as_df(sheets_client: SheetsClient, spreadsheet_id: str) -> pd.Da
         return pd.DataFrame()
     
 
-def upload_file_to_drive(drive_client: DriveClient, file_obj, file_name: str, folder_id: str) -> str:
+def upload_pdf(drive_client: DriveClient, file_obj, file_name: str, folder_id: str) -> str:
     """
     Upload a PDF file to a specified Google Drive folder.
 
@@ -205,7 +196,7 @@ def upload_file_to_drive(drive_client: DriveClient, file_obj, file_name: str, fo
         return None
 
 
-def move_file_between_folders(drive_client: DriveClient, file_id, target_folder_id):
+def move_pdf(drive_client: DriveClient, file_id, target_folder_id):
     """
     Move a file to a new folder in Google Drive.
     

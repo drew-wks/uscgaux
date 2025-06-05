@@ -1,6 +1,7 @@
 import os
 import logging
-from datetime import datetime, timezone
+from typing import List, Dict, Union
+from env_config import RAG_CONFIG
 from qdrant_client import QdrantClient
 from qdrant_client.http import models, exceptions as qdrant_exceptions
 from log_writer import log_event
@@ -24,7 +25,7 @@ def init_qdrant(mode: str = "cloud") -> QdrantClient:
         raise ValueError(f"Invalid mode '{mode}'. Must be 'cloud' or 'local'.")
 
 
-def which_qdrant(client):
+def which_qdrant(client: QdrantClient) -> str:
     """
     Detect whether the Qdrant client is connected to a local or cloud instance.
     Inspects the internal _client type string for clues.
@@ -60,7 +61,7 @@ def which_qdrant(client):
     return qdrant_location
 
 
-def list_collections(client):
+def list_collections(client: QdrantClient) -> List[str]:
     """
     List all collections in the Qdrant instance.
 
@@ -80,7 +81,7 @@ def list_collections(client):
         return []
 
 
-def is_pdf_id_in_qdrant(client, RAG_CONFIG, pdf_id):
+def in_qdrant(client: QdrantClient, RAG_CONFIG: Dict[str, str], pdf_id: str) -> bool:
     """
     Check if a document with a specific pdf_id exists in the Qdrant collection.
 
@@ -118,7 +119,8 @@ def is_pdf_id_in_qdrant(client, RAG_CONFIG, pdf_id):
         return False
 
 
-def check_qdrant_record_exists(record_id, qdrant, collection_name):
+def check_record_exists(record_id: Union[str, int], client: QdrantClient, collection_name: str) -> bool:
+
     """
     Check if a record with the given ID exists in the specified Qdrant collection.
 
@@ -131,7 +133,7 @@ def check_qdrant_record_exists(record_id, qdrant, collection_name):
         bool: True if the record exists, False otherwise.
     """
     try:
-        point = qdrant.get_point(collection_name=collection_name, point_id=record_id)
+        point = client.get_point(collection_name=collection_name, point_id=record_id)
         exists = point is not None
         logging.info(f"Record ID '{record_id}' existence in collection '{collection_name}': {exists}")
         return exists
@@ -141,7 +143,7 @@ def check_qdrant_record_exists(record_id, qdrant, collection_name):
 
 
 
-def delete_qdrant_by_pdf_id(qdrant_client, collection_name, pdf_id):
+def delete_record_by_pdf_id(client: QdrantClient, collection_name: str, pdf_id: str):
     """
     Delete all vectors in a Qdrant collection that match a given pdf_id.
 
@@ -159,7 +161,7 @@ def delete_qdrant_by_pdf_id(qdrant_client, collection_name, pdf_id):
                 )
             ]
         )
-        result = qdrant_client.delete(collection_name=collection_name, points_selector=filter_condition)
+        result = client.delete(collection_name=collection_name, points_selector=filter_condition)
         logging.info(f"Deleted points for pdf_id {pdf_id} from {collection_name}. Operation ID: {result.operation_id}")
     except Exception as e:
         logging.error(f"Error deleting points for pdf_id {pdf_id}: {e}")

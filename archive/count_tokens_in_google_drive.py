@@ -23,7 +23,7 @@ import pdfminer.high_level
 import tiktoken
 from dotenv import load_dotenv
 
-from app_config import *
+from env_config import *
 import google_utils as goo_utils
 
 # ── Logging & env ────────────────────────────────────────────────────────────
