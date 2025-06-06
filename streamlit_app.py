@@ -9,7 +9,7 @@ from library_utils import validate_rows
 from gcp_utils import get_sheets_client, get_drive_client, fetch_sheet_as_df
 from qdrant_utils import get_qdrant_client
 from propose_new_files import propose_new_files
-from find_orphans import find_orphans
+from cleanup_orphans import find_orphans
 from promote_files import promote_files
 from delete_tagged import delete_tagged
 import ui_utils
@@ -147,14 +147,14 @@ with tabs[1]:
 
     # Step 5
     with st.container():
-        st.markdown("**Step 5. Check for orphan rows and PDFs**")
+        st.markdown("**Step 5. Check for orphans: rows, PDFs and Qdrant records**")
         indent_col, content_col = st.columns([0.05, 0.95])
         with content_col:
             if st.button("Find orphans", key="find_orphans", type="secondary"):
                 with st.spinner("Searching rows, PDFs, and records..."):
-                    orphan_rows_df, orphan_files_df, log_output = find_orphans(
+                    orphan_rows_df, orphan_files_df, orphan_qdrant_records_df, log_df = find_orphans(
                         drive_client, sheets_client)  # type: ignore
-                if orphan_rows_df.empty and orphan_files_df.empty:
+                if orphan_rows_df.empty and orphan_files_df.empty and orphan_qdrant_records_df.empty:
                     st.success("✅ No orphans found.")
                 else:
                     if not orphan_rows_df.empty:
@@ -163,6 +163,9 @@ with tabs[1]:
                     if not orphan_files_df.empty:
                         st.write("⚠️ Orphan files found in PDF folders")
                         st.dataframe(orphan_files_df)
+                    if not orphan_qdrant_records_df.empty:
+                        st.write("⚠️ Orphan records found in Qdrant")
+                        st.dataframe(orphan_qdrant_records_df)
     # Step 6
     with st.container():
         st.markdown("**Step 6. Promote new files to production**")
