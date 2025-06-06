@@ -15,13 +15,13 @@ from langchain.schema import Document
 
 
 
-def init_vectorstore(client: QdrantClient, config: dict) -> QdrantVectorStore:
+def init_vectorstore(client: QdrantClient, RAG_CONFIG: dict) -> QdrantVectorStore:
     """
     Initialize a LangChain QdrantVectorStore using a Qdrant client and config.
 
     Args:
         client (QdrantClient): The Qdrant client instance.
-        config (dict): Dictionary containing Qdrant and embedding model configuration.
+        RAG_CONFIG (dict): Dictionary containing Qdrant and embedding model configuration.
 
     Returns:
         QdrantVectorStore: Initialized LangChain vectorstore object.
@@ -109,14 +109,14 @@ def pdf_to_docs_via_drive(
 
 def chunk_documents(
     docs_pages: List[Document],
-    config: Dict[str, Any]
+    RAG_CONFIG: Dict[str, Any]
 ) -> List[Document]:
     """
     Splits full-page Document objects into smaller chunks using LangChain's RecursiveCharacterTextSplitter.
 
     Args:
         docs_pages (List[Document]): List of full-page LangChain Document objects.
-        config (dict): Configuration dictionary with chunking parameters.
+        RAG_CONFIG (dict): Configuration dictionary with chunking parameters.
 
     Returns:
         List[Document]: List of chunked Document objects.
@@ -125,11 +125,20 @@ def chunk_documents(
         Exception: If any error occurs during chunking.
     """
     try:
+        chunk_size=RAG_CONFIG["chunk_size"],
+        chunk_overlap=RAG_CONFIG["chunk_overlap"],
+        length_function=RAG_CONFIG["length_function"],
+        separators=RAG_CONFIG["separators"]
+    except KeyError as e:
+        logging.error(f"Missing required RAG_CONFIG key: {e}")
+        raise
+   
+    try:    
         text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=RAG_CONFIG["chunk_size"],
-            chunk_overlap=RAG_CONFIG["chunk_overlap"],
-            length_function=RAG_CONFIG["length_function"],
-            separators=RAG_CONFIG["separators"]
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            length_function=length_function,
+            separators=separators
         )
 
         docs_chunks = text_splitter.split_documents(docs_pages)

@@ -4,7 +4,6 @@ from typing import List, Dict, Union
 from env_config import RAG_CONFIG
 from qdrant_client import QdrantClient
 from qdrant_client.http import models, exceptions as qdrant_exceptions
-from log_writer import log_event
 
 
 
@@ -93,10 +92,9 @@ def in_qdrant(client: QdrantClient, RAG_CONFIG: Dict[str, str], pdf_id: str) -> 
     Returns:
         bool: True if the document exists, False otherwise.
     """
-    collection_name = RAG_CONFIG.get('qdrant_collection_name')
-    if not collection_name:
-        logging.warning("Collection name not specified in CONFIG.")
-        return False
+    collection_name = RAG_CONFIG["qdrant_collection_name"]
+    if collection_name is None:
+        raise ValueError("Missing QDRANT collection name in RAG_CONFIG")
     try:
         search_result = client.search(
             collection_name=collection_name,
@@ -119,7 +117,7 @@ def in_qdrant(client: QdrantClient, RAG_CONFIG: Dict[str, str], pdf_id: str) -> 
         return False
 
 
-def check_record_exists(record_id: Union[str, int], client: QdrantClient, collection_name: str) -> bool:
+def check_record_exists(client: QdrantClient, RAG_CONFIG: Dict[str, str], record_id: Union[str, int]) -> bool:
 
     """
     Check if a record with the given ID exists in the specified Qdrant collection.
@@ -127,12 +125,15 @@ def check_record_exists(record_id: Union[str, int], client: QdrantClient, collec
     Args:
         record_id (str or int): The ID of the record to check.
         qdrant: Qdrant client instance.
-        collection_name (str): The name of the collection.
+        CONFIG (dict): Configuration dictionary containing collection name.
 
     Returns:
         bool: True if the record exists, False otherwise.
     """
     try:
+        collection_name = RAG_CONFIG["qdrant_collection_name"]
+        if collection_name is None:
+            raise ValueError("Missing QDRANT collection name in RAG_CONFIG")
         point = client.get_point(collection_name=collection_name, point_id=record_id)
         exists = point is not None
         logging.info(f"Record ID '{record_id}' existence in collection '{collection_name}': {exists}")
@@ -142,18 +143,21 @@ def check_record_exists(record_id: Union[str, int], client: QdrantClient, collec
         return False
 
 
-def get_all_pdf_ids_in_qdrant(client: QdrantClient, collection_name: str) -> List[str]:
+def get_all_pdf_ids_in_qdrant(client: QdrantClient, RAG_CONFIG: Dict[str, str]) -> List[str]:
     """
     Retrieve a list of all unique pdf_ids stored in the Qdrant collection.
 
     Args:
         client: Qdrant client instance.
-        collection_name: Name of the collection.
+        CONFIG (dict): Configuration dictionary containing collection name.
 
     Returns:
         List of unique pdf_ids found in the Qdrant collection.
     """
     try:
+        collection_name = RAG_CONFIG["qdrant_collection_name"]
+        if collection_name is None:
+            raise ValueError("Missing QDRANT collection name in RAG_CONFIG")
         response = client.scroll(
             collection_name=collection_name,
             scroll_filter=None,
@@ -175,16 +179,19 @@ def get_all_pdf_ids_in_qdrant(client: QdrantClient, collection_name: str) -> Lis
 
 
 
-def delete_record_by_pdf_id(client: QdrantClient, collection_name: str, pdf_id: str):
+def delete_record_by_pdf_id(client: QdrantClient, RAG_CONFIG: Dict[str, str], pdf_id: str):
     """
     Delete all vectors in a Qdrant collection that match a given pdf_id.
 
     Args:
         qdrant_client: Qdrant client.
-        collection_name: Name of the collection.
+        CONFIG (dict): Configuration dictionary containing collection name.
         pdf_id: The UUID of the PDF.
     """
     try:
+        collection_name = RAG_CONFIG["qdrant_collection_name"]
+        if collection_name is None:
+            raise ValueError("Missing QDRANT collection name in RAG_CONFIG")
         filter_condition = models.Filter(
             must=[
                 models.FieldCondition(

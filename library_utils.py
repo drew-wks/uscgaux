@@ -2,9 +2,9 @@ import os
 import logging
 import uuid
 from datetime import datetime, timezone
-from log_writer import log_event
 import pandas as pd
 from pypdf import PdfReader
+from gcp_utils import fetch_sheet, get_as_dataframe
 
 
 def compute_pdf_id(pdf_bytes_io):
@@ -207,10 +207,11 @@ def validate_core_metadata(df):
     logging.info("Catalog structure validated successfully.")
 
 
+
 def validate_rows(sheets_client):
     """
     Validates all rows in the spreadsheet regardless of status.
-    
+
     - Required fields (except ignored) must be non-empty
     - All fields must be strings, except for aux_specific and public_release
     - aux_specific and public_release must be valid booleans
@@ -222,10 +223,21 @@ def validate_rows(sheets_client):
         invalid_df (DataFrame): rows that failed one or more validation checks, with an 'issues' column
         log_df (DataFrame): DataFrame of log entries for valid and invalid cases
     """
+    spreadsheet_id = os.environ["LIBRARY_UNIFIED"]
 
-    df = fetch_sheet_as_df(sheets_client, os.environ["LIBRARY_UNIFIED"])
+    try:
+        sheet = fetch_sheet(sheets_client, spreadsheet_id)
+        if sheet is None:
+            logging.error(f"[validate_rows] Sheet not found for ID: {spreadsheet_id}")
+            return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+        df = get_as_dataframe(sheet, evaluate_formulas=True, dtype=str)
+        df = df.fillna('')
+        logging.debug(f"[get_as_dataframe] Column dtypes: {df.dtypes.to_dict()}")
+    except Exception as e:
+        logging.error(f"[get_as_dataframe] Failed to convert worksheet to DataFrame: {e}")
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+
     headers = df.columns.tolist()
-
     ignored_fields = {"publication_number", "organization", "unit", "upsert_date", "status", "status_timestamp"}
     required_fields = [col for col in headers if col not in ignored_fields]
     date_fields = {"issue_date", "upsert_date", "expiration_date", "status_timestamp"}
@@ -244,20 +256,17 @@ def validate_rows(sheets_client):
             issues.append("missing_pdf_id")
             row_valid = False
 
-        # Required fields must be populated
         missing_fields = [f for f in required_fields if not str(row.get(f, "")).strip()]
         if missing_fields:
             issues.append(f"missing_required_fields: {missing_fields}")
             row_valid = False
-            
-        # Unit field must be populated if scope is not "National" or blank
+
         scope = str(row.get("scope", "")).strip()
         unit = str(row.get("unit", "")).strip()
         if scope and scope.lower() != "national" and not unit:
             issues.append(f"missing_unit_for_scope: scope='{scope}' requires a unit")
             row_valid = False
 
-        # All fields except bools must be strings
         non_string_fields = [
             f for f in headers
             if f not in bool_fields and not isinstance(row.get(f), str)
@@ -266,7 +275,6 @@ def validate_rows(sheets_client):
             issues.append(f"non_string_fields: {non_string_fields}")
             row_valid = False
 
-        # Boolean fields must be valid
         bad_bools = [
             f for f in bool_fields
             if str(row.get(f)).strip().lower() not in {"true", "false", "1", "0"}
@@ -275,7 +283,6 @@ def validate_rows(sheets_client):
             issues.append(f"invalid_boolean_fields: {bad_bools}")
             row_valid = False
 
-        # Date fields must follow the correct format
         bad_dates = []
         for f in date_fields:
             val = str(row.get(f, "")).strip()
@@ -288,11 +295,9 @@ def validate_rows(sheets_client):
             issues.append(f"invalid_date_format: {bad_dates}")
             row_valid = False
 
-        # Validation logic
         if row_valid:
             valid_rows.append(row)
-
-        if not row_valid:
+        else:
             row_with_issues = row.copy()
             row_with_issues["issues"] = "; ".join(issues)
             invalid_rows.append(row_with_issues)
@@ -308,17 +313,16 @@ def validate_rows(sheets_client):
     valid_df = pd.DataFrame(valid_rows)
     invalid_df = pd.DataFrame(invalid_rows)
     log_df = pd.DataFrame(log_entries)
-    
+
     logging.info(f"✅ Found {len(valid_df)} valid rows in LIBRARY_UNIFIED.")
     logging.info(f"⚠️ Found {len(invalid_df)} invalid rows in LIBRARY_UNIFIED.")
 
-
-    # Reorder columns so that 'issues' comes first
     if not invalid_df.empty and "issues" in invalid_df.columns:
         cols = ["issues"] + [col for col in invalid_df.columns if col != "issues"]
         invalid_df = invalid_df[cols]
-        
+
     return valid_df, invalid_df, log_df
+
 
 
 

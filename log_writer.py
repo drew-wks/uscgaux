@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.INFO)
 
 
 
-def log_event(action, pdf_id, filename, sheets_client: SheetsClient, event_log_id=None, extra_columns=None):
+def log_event(action, pdf_id, filename, sheets_client, event_log_id=None, extra_columns=None):
     """
     Append a single row to the ADMIN_EVENT_LOG tab.
 
@@ -41,7 +41,7 @@ def log_event(action, pdf_id, filename, sheets_client: SheetsClient, event_log_i
     return event
 
 
-def log_events(events, sheets_client: SheetsClient, event_log_id=None):
+def log_events(events, sheets_client, event_log_id=None):
     """
     Append multiple rows to the ADMIN_EVENT_LOG tab and return the timestamped events.
 

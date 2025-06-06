@@ -1,15 +1,15 @@
 import os
 import pandas as pd
 import logging
-from typing import Tuple, List
+from typing import Tuple
 from env_config import RAG_CONFIG
 from gcp_utils import list_pdfs_in_folder, fetch_sheet, fetch_sheet_as_df
-from qdrant_utils import get_all_pdf_ids_in_qdrant
-from log_writer import log_events
+from qdrant_utils import get_all_pdf_ids_in_qdrant, delete_record_by_pdf_id
+from log_writer import log_event
 
 
 
-def find_orphan_rows(df: pd.DataFrame, all_file_ids: set, sheets_client: SheetsClient) -> Tuple[pd.DataFrame, list[dict]]: # type: ignore
+def find_orphan_rows(sheets_client: SheetsClient, df: pd.DataFrame, all_file_ids: set) -> Tuple[pd.DataFrame, list[dict]]: # type: ignore
     """Identify orphan rows and flag them in the sheet."""
     log_entries = []
     updates = []
@@ -64,29 +64,39 @@ def find_orphan_files(df: pd.DataFrame, all_files_df: pd.DataFrame) -> Tuple[pd.
     return orphan_files, log_entries
 
 
-def find_orphan_qdrant_records(client: QdrantClient, collection_name: str, library_df: pd.DataFrame) -> List[str]:
+def find_orphan_qdrant_records(qdrant_client: QdrantClient, collection_name: str, library_df: pd.DataFrame) -> Tuple[pd.DataFrame, list[dict]]:
     """
-    Find pdf_ids that exist in Qdrant but are not marked as 'live' in LIBRARY_UNIFIED.
+    Find Qdrant records whose pdf_id is not marked as 'live' in LIBRARY_UNIFIED.
 
     Args:
-        client: Qdrant client instance.
+        qdrant_client: Qdrant client instance.
         collection_name: Qdrant collection name.
         library_df: DataFrame of LIBRARY_UNIFIED.
 
     Returns:
-        List of orphan pdf_ids in Qdrant.
+        Tuple of:
+            - orphan_qdrant_df (DataFrame): DataFrame of orphan pdf_ids.
+            - log_entries (list of dict): Corresponding log actions.
     """
-    qdrant_pdf_ids = get_all_pdf_ids_in_qdrant(client, collection_name)
+    qdrant_pdf_ids = get_all_pdf_ids_in_qdrant(qdrant_client, collection_name)
     live_pdf_ids = set(library_df[library_df["status"] == "live"]["pdf_id"].astype(str))
 
     orphan_ids = [pdf_id for pdf_id in qdrant_pdf_ids if pdf_id not in live_pdf_ids]
+    log_entries = []
+
     if orphan_ids:
         logging.warning(f"Found {len(orphan_ids)} orphan Qdrant records: {orphan_ids}")
-    return orphan_ids
+        log_entries = [{
+            "action": "orphan_record_detected_in_qdrant",
+            "pdf_id": pdf_id
+        } for pdf_id in orphan_ids]
+
+    orphan_qdrant_records = pd.DataFrame({"pdf_id": orphan_ids})
+    return orphan_qdrant_records, log_entries
 
 
 
-def find_orphans(drive_client: DriveClient, sheets_client: SheetsClient) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:  # type: ignore
+def find_orphans(drive_client: DriveClient, sheets_client: SheetsClient, qdrant_client: QdrantClient) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:  # type: ignore
     """
     Identify and flag orphan records and files across LIBRARY_UNIFIED, Google Drive folders, and Qdrant.
 
@@ -94,7 +104,7 @@ def find_orphans(drive_client: DriveClient, sheets_client: SheetsClient) -> Tupl
         Tuple of:
             - orphan_rows (DataFrame)
             - orphan_files (DataFrame)
-            - orphan_qdrant_df (DataFrame)
+            - orphan_qdrant_records (DataFrame)
             - log_entries (DataFrame)
     """
     df = fetch_sheet_as_df(sheets_client, os.environ["LIBRARY_UNIFIED"])  # type: ignore
@@ -115,28 +125,37 @@ def find_orphans(drive_client: DriveClient, sheets_client: SheetsClient) -> Tupl
     all_files_df = pd.concat(drive_files, ignore_index=True)
     all_file_ids = set(all_files_df["ID"].astype(str).unique())
 
-    orphan_rows, row_log_entries = find_orphan_rows(df, all_file_ids, sheets_client)
+    orphan_rows, row_log_entries = find_orphan_rows(sheets_client, df, all_file_ids)
     orphan_files, file_log_entries = find_orphan_files(df, all_files_df)
+    orphan_qdrant_records, qdrant_log_entries = find_orphan_qdrant_records(qdrant_client, RAG_CONFIG["qdrant_collection_name"], df)
 
-    # --- Qdrant Orphan Records ---
-    qdrant_client = QdrantClient(
-        url=os.environ["QDRANT_URL"],
-        api_key=os.environ["QDRANT_API_KEY"],
-        prefer_grpc=True
-    )
-    collection_name = RAG_CONFIG["qdrant_collection_name"]
-    orphan_qdrant_ids = find_orphan_qdrant_records(qdrant_client, collection_name, df)
-
-    orphan_qdrant_df = pd.DataFrame([
-        {
-            "action": "orphan_qdrant_record",
-            "pdf_id": pdf_id,
-            "pdf_file_name": None
-        } for pdf_id in orphan_qdrant_ids
-    ])
-
-    all_log_entries = row_log_entries + file_log_entries + orphan_qdrant_df.to_dict("records")
+    all_log_entries = row_log_entries + file_log_entries + qdrant_log_entries
     log_df = pd.DataFrame(all_log_entries)
 
     logging.info(f"Returning {len(log_df)} total log entries.")
-    return orphan_rows, orphan_files, orphan_qdrant_df, log_df
+    return orphan_rows, orphan_files, orphan_qdrant_records, log_df
+
+
+
+def delete_orphan_qdrant_records(
+    qdrant_client: QdrantClient,
+    orphan_qdrant_records: pd.DataFrame 
+) -> None:
+    """
+    Deletes all Qdrant records whose pdf_id appears in the orphan_qdrant_df DataFrame.
+
+    Args:
+        client (QdrantClient): Qdrant client instance.
+        orphan_qdrant_records (pd.DataFrame): DataFrame with orphaned pdf_ids.
+    """
+    pdf_ids = orphan_qdrant_records["pdf_id"].dropna().unique()
+    collection_name = RAG_CONFIG["qdrant_collection_name"]
+    
+    for pdf_id in pdf_ids:
+        try:
+            logging.info(f"🗑️ Deleting orphaned Qdrant records for pdf_id: {pdf_id}")
+            delete_record_by_pdf_id(qdrant_client, collection_name, pdf_id)
+            log_event("orphan_qdrant_record_deleted", pdf_id, f"Deleted from {collection_name}")
+        except Exception as e:
+            logging.error(f"❌ Failed to delete records for pdf_id {pdf_id} from {collection_name}: {e}")
+            log_event("orphan_qdrant_record_delete_failed", pdf_id, str(e))
