@@ -1,12 +1,13 @@
 #  Utilities for langchain
 
-from env_config import RAG_CONFIG
+from env_config import get_config
 import logging
 from typing import List, Dict, Any
 from langchain_openai import OpenAIEmbeddings
 from langchain_qdrant import QdrantVectorStore
 import pypdf
 from langchain_community.document_loaders import PyPDFLoader
+from qdrant_client import QdrantClient
 from io import BytesIO
 from googleapiclient.discovery import Resource
 from langchain.schema import Document
@@ -15,13 +16,12 @@ from langchain.schema import Document
 
 
 
-def init_vectorstore(client: QdrantClient, RAG_CONFIG: dict) -> QdrantVectorStore:
+def init_vectorstore(client: QdrantClient) -> QdrantVectorStore:
     """
     Initialize a LangChain QdrantVectorStore using a Qdrant client and config.
 
     Args:
         client (QdrantClient): The Qdrant client instance.
-        RAG_CONFIG (dict): Dictionary containing Qdrant and embedding model configuration.
 
     Returns:
         QdrantVectorStore: Initialized LangChain vectorstore object.
@@ -31,8 +31,8 @@ def init_vectorstore(client: QdrantClient, RAG_CONFIG: dict) -> QdrantVectorStor
         Exception: For all other initialization errors.
     """
     try:
-        collection_name = RAG_CONFIG["qdrant_collection_name"]
-        embedding_model = RAG_CONFIG["embedding_model"]
+        collection_name = get_config("qdrant_collection_name")
+        embedding_model = get_config("embedding_model")
     except KeyError as e:
         logging.error(f"Missing required RAG_CONFIG key: {e}")
         raise
@@ -51,10 +51,10 @@ def init_vectorstore(client: QdrantClient, RAG_CONFIG: dict) -> QdrantVectorStor
     except Exception as e:
         logging.error(f"Failed to initialize LangChain QdrantVectorStore: {e}")
         raise
+    
+    
 
-
-
-def pdf_to_docs_via_drive(
+def pdf_to_Docs_via_Drive(
     drive_client: Resource,
     file_id: str,
     planned_validated_metadata: Dict[str, Any]
@@ -95,6 +95,11 @@ def pdf_to_docs_via_drive(
 
         # Add metadata to each doc
         for doc in docs:
+            # Adjust for human-friendly page numbering
+            raw_page = doc.metadata.get("page")
+            if raw_page is not None:
+                doc.metadata["page_number"] = raw_page + 1
+
             doc.metadata.update(planned_validated_metadata)
             docs_pages.append(doc)
 
@@ -125,10 +130,10 @@ def chunk_documents(
         Exception: If any error occurs during chunking.
     """
     try:
-        chunk_size=RAG_CONFIG["chunk_size"],
-        chunk_overlap=RAG_CONFIG["chunk_overlap"],
-        length_function=RAG_CONFIG["length_function"],
-        separators=RAG_CONFIG["separators"]
+        chunk_size=get_config("chunk_size"),
+        chunk_overlap=get_config("chunk_overlap"),
+        length_function=get_config("length_function"),
+        separators=get_config("separators")
     except KeyError as e:
         logging.error(f"Missing required RAG_CONFIG key: {e}")
         raise

@@ -5,9 +5,9 @@ st.set_page_config(page_title="ASK Auxiliary Source of Knowledge",
                    initial_sidebar_state="collapsed")
 from env_config import set_env_vars
 set_env_vars()
-from library_utils import validate_rows
-from gcp_utils import get_sheets_client, get_drive_client, fetch_sheet_as_df
-from qdrant_utils import get_qdrant_client
+from library_utils import validate_rows_format
+from gcp_utils import init_sheets_client, init_drive_client, fetch_sheet_as_df
+from qdrant_utils import init_qdrant_client
 from propose_new_files import propose_new_files
 from cleanup_orphans import find_orphans
 from promote_files import promote_files
@@ -24,7 +24,7 @@ def get_cached_drive_client():
     if not creds_info:
         st.error("Missing `[gcp_service_account]` in your secrets.")
         st.stop()
-    return get_drive_client(creds_info)
+    return init_drive_client(creds_info)
 
 
 @st.cache_resource
@@ -33,7 +33,7 @@ def get_cached_sheets_client():
     if not creds_info:
         st.error("Missing `[gcp_service_account]` in your secrets.")
         st.stop()
-    return get_sheets_client(creds_info)
+    return init_sheets_client(creds_info)
 
 
 @st.cache_resource
@@ -42,7 +42,7 @@ def get_cached_qdrant_client():
     if not location:
         st.error("Missing `qdrant_location` in your secrets.")
         st.stop()
-    return get_qdrant_client(location)
+    return init_qdrant_client(location)
 
 
 try:
@@ -121,7 +121,7 @@ with tabs[1]:
         with content_col:
             if st.button("Remove flagged rows", key="remove_rows", type="secondary"):
                 with st.spinner("Searching rows, PDFs, and records..."):
-                    rows_to_delete = delete_tagged(drive_client, sheets_client)
+                    rows_to_delete = delete_tagged(drive_client, sheets_client, qdrant_client)
                 if rows_to_delete is None or rows_to_delete.empty:
                     st.info("No flagged rows found.")
                 else:
@@ -135,9 +135,9 @@ with tabs[1]:
         st.markdown("**Step 4. Validate rows in LIBRARY_UNIFIED**")
         indent_col, content_col = st.columns([0.05, 0.95])
         with content_col:
-            if st.button("Validate rows", key="validate_rows", type="secondary"):
+            if st.button("Validate rows format", key="validate_rows_format", type="secondary"):
                 with st.spinner("Searching rows, PDFs, and records..."):
-                    valid_df, invalid_df, log_df = validate_rows(sheets_client)
+                    valid_df, invalid_df, log_df = validate_rows_format(sheets_client)
                 if invalid_df.empty:
                     st.success("✅ No invalid rows found.")
                 else:
@@ -153,7 +153,7 @@ with tabs[1]:
             if st.button("Find orphans", key="find_orphans", type="secondary"):
                 with st.spinner("Searching rows, PDFs, and records..."):
                     orphan_rows_df, orphan_files_df, orphan_qdrant_records_df, log_df = find_orphans(
-                        drive_client, sheets_client)  # type: ignore
+                        drive_client, sheets_client, qdrant_client)  # type: ignore
                 if orphan_rows_df.empty and orphan_files_df.empty and orphan_qdrant_records_df.empty:
                     st.success("✅ No orphans found.")
                 else:
@@ -176,7 +176,7 @@ with tabs[1]:
             os.environ["DRY_RUN"] = str(dry_run)
             if st.button("Promote PDFs", key="promote_pdfs", type="secondary"):
                 with st.spinner("Promoting PDFs..."):
-                    promote_files(drive_client, sheets_client)
+                    promote_files(drive_client, sheets_client, qdrant_client)
                 st.success("✅ Files promoted")
 
 

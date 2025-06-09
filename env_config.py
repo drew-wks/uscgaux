@@ -9,10 +9,10 @@ logging.basicConfig(
 )
 
 
-# --- Google Drive Folder IDs ---
+# --- Google Drive Folder IDs and Google Sheet File IDs ---
 # https://drive.google.com/drive/folders/1CZcBJFFhuzrbzIArDOwc07xPELqDnikf
 
-GOOGLE_CONFIG = {
+GCP_CONFIG = {
     "PDF_TAGGING": "1993TlUkd9_4XqWCutyY5oNTpmBdnxefc",  # a PDF Folder
     "PDF_LIVE": "1-vyQQp30mKzudkTOk7YJLmmVDirBOIpg",  # a PDF Folder
     "PDF_ARCHIVE": "1FYUFxenYC6nWomzgv6j1O4394Zv6Bs5F",  # a PDF Folder
@@ -79,7 +79,7 @@ def set_env_vars():
     os.environ["FORCE_USER_AUTH"] = str(force_user_auth).lower()
     os.environ["QDRANT_PATH"] = "/Users/drew_wilkins/Drews_Files/Drew/Python/Localcode/Drews_Tools/qdrant_ASK_lib_tools/qdrant_db"
 
-    for key, value in GOOGLE_CONFIG.items():
+    for key, value in GCP_CONFIG.items():
         os.environ[key] = value
 
     # Only load Streamlit secrets if explicitly running in Streamlit
@@ -117,3 +117,27 @@ RAG_CONFIG = {
     "generation_model": "gpt-3.5-turbo-16k",
     "temperature": 0.7,
 }
+
+
+def get_config(key: str):
+    """
+    Retrieve a required configuration value from RAG_CONFIG.
+
+    Args:
+        key (str): The configuration key to retrieve.
+
+    Returns:
+        Any: The value associated with the key in RAG_CONFIG.
+
+    Raises:
+        ValueError: If the key is missing or the value is None.
+        KeyError: If the key is not present in RAG_CONFIG.
+    """
+    if key not in RAG_CONFIG:
+        raise KeyError(f"Missing required config key '{key}' in RAG_CONFIG")
+
+    value = RAG_CONFIG[key]
+    if value is None:
+        raise ValueError(f"Config key '{key}' is set to None in RAG_CONFIG")
+
+    return value

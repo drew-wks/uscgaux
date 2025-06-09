@@ -3,7 +3,6 @@
 import os
 import logging
 import json
-import streamlit as st
 from io import BytesIO
 import pandas as pd
 import gspread
@@ -14,8 +13,6 @@ from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build, Resource as DriveClient
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
-
-from env_config import GOOGLE_CONFIG
 
 
 def get_gcp_credentials() -> Credentials:
@@ -33,12 +30,37 @@ def get_gcp_credentials() -> Credentials:
         raise ValueError(f"Failed to load GCP credentials from environment: {e}")
 
 
-def get_drive_client(creds: Credentials) -> DriveClient:
+def init_drive_client(creds: Credentials) -> DriveClient:
+    """
+    Initializes a Google Drive client using the provided credentials.
+
+    Applies the required Drive API scopes to the provided credentials and returns
+    an authorized `googleapiclient.discovery.Resource` object for interacting with
+    the Drive v3 API.
+
+    Args:
+        creds (Credentials): Google service account or user credentials.
+
+    Returns:
+        DriveClient: An authorized client for the Google Drive API.
+    """
     scoped_creds = creds.with_scopes(["https://www.googleapis.com/auth/drive"])
     return build("drive", "v3", credentials=scoped_creds)
 
 
-def get_sheets_client(creds: Credentials) -> SheetsClient:
+def init_sheets_client(creds: Credentials) -> SheetsClient:
+    """
+    Initializes a Google Sheets client using the provided credentials.
+
+    Applies the necessary scopes for accessing both Sheets and Drive APIs,
+    and returns a `gspread` client authorized with those credentials.
+
+    Args:
+        creds (Credentials): Google service account or user credentials.
+
+    Returns:
+        SheetsClient: An authorized `gspread` client for accessing Google Sheets.
+    """
     scoped_creds = creds.with_scopes([
         "https://spreadsheets.google.com/feeds",
         "https://www.googleapis.com/auth/drive",
@@ -142,7 +164,7 @@ def fetch_sheet(sheets_client: SheetsClient, spreadsheet_id: str) -> Worksheet |
 
 def fetch_sheet_as_df(sheets_client: SheetsClient, spreadsheet_id: str) -> pd.DataFrame:
     """
-    Fetches the first worksheet from a Google Sheet by ID and returns its contents as a DataFrame.
+    Fetches the first worksheet from a Google Sheet by ID and returns its contents as a DataFrame with all fields forced to string. Booleans can get converted later if needed.
 
     Args:
         sheets_client (GSpreadClient): An authenticated gspread client.
@@ -155,15 +177,16 @@ def fetch_sheet_as_df(sheets_client: SheetsClient, spreadsheet_id: str) -> pd.Da
     try:
         sheet = fetch_sheet(sheets_client, spreadsheet_id)
         if sheet is None:
+            logging.error(f"Worksheet {spreadsheet_id} is empty.")
             return pd.DataFrame()
-        data = sheet.get_all_records()
-        return pd.DataFrame(data)
+        df = get_as_dataframe(sheet, evaluate_formulas=True, dtype=str)
+        return df
     except Exception as e:
         logging.error(f"[fetch_sheet_as_df] Failed to convert worksheet to DataFrame: {e}")
         return pd.DataFrame()
     
 
-def upload_pdf(drive_client: DriveClient, file_obj, file_name: str, folder_id: str) -> str:
+def upload_pdf(drive_client: DriveClient, file_obj, file_name: str, folder_id: str) -> None:
     """
     Upload a PDF file to a specified Google Drive folder.
 

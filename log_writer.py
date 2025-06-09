@@ -7,6 +7,8 @@ Provides a reusable logging function for all agents to append entries to EVENT_L
 
 import os, logging
 from datetime import datetime, timezone
+from typing import Optional, Dict, List, Any
+from gspread.client import Client as SheetsClient
 from env_config import set_env_vars
 set_env_vars() 
 
@@ -14,15 +16,15 @@ logging.basicConfig(level=logging.INFO)
 
 
 
-def log_event(action, pdf_id, filename, sheets_client, event_log_id=None, extra_columns=None):
+def log_event(sheets_client: SheetsClient, action: str, pdf_id: str, filename: str, event_log_id: Optional[str] = None, extra_columns: Optional[List[Any]] = None):
     """
     Append a single row to the ADMIN_EVENT_LOG tab.
 
     Args:
+        sheets_client: Authenticated Google Sheets client
         action (str): Action type (e.g., 'promoted_to_live')
         pdf_id (str): PDF identifier
         filename (str): Name of the file
-        sheets_client: Authenticated Google Sheets client
         event_log_id (str): Optional ID of the spreadsheet. Falls back to env var.
         extra_columns: Optional list of extra values.
         
@@ -41,19 +43,23 @@ def log_event(action, pdf_id, filename, sheets_client, event_log_id=None, extra_
     return event
 
 
-def log_events(events, sheets_client, event_log_id=None):
+def log_events(
+    sheets_client: SheetsClient,
+    events: List[Dict[str, Any]],
+    event_log_id: Optional[str] = None
+) -> List[Dict[str, Any]]:
     """
     Append multiple rows to the ADMIN_EVENT_LOG tab and return the timestamped events.
 
     Args:
+        sheets_client: Authenticated Google Sheets client
         events: List of dictionaries in the form:
             {
                 "action": str,
                 "pdf_id": str,
                 "pdf_file_name": str,
-                "extra": optional list of additional values
+                "extra": Optional[List[Any]]
             }
-        sheets_client: Authenticated Google Sheets client
         event_log_id (str): Optional ID of the spreadsheet. Falls back to env var.
 
     Returns:
@@ -83,7 +89,7 @@ def log_events(events, sheets_client, event_log_id=None):
             rows.append(row_values)
             logged_events.append(event)
 
-        ws.append_rows(rows, value_input_option="USER_ENTERED")
+        ws.append_rows(rows, value_input_option="USER_ENTERED") # type: ignore
 
         log_url = f"https://docs.google.com/spreadsheets/d/{os.environ['EVENT_LOG']}"
         logging.info(f"Admin event log written to: {log_url}")

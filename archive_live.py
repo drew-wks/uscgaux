@@ -14,48 +14,69 @@ import os
 import logging
 from datetime import datetime, timezone
 import pandas as pd
-from gcp_utils import move_pdf, fetch_sheet
-from library_utils import safe_append_rows_to_sheet, remove_row
+from gspread.client import Client as SheetsClient
+from googleapiclient.discovery import Resource as DriveClient
+from qdrant_client import QdrantClient
+from env_config import get_config
+from gcp_utils import get_folder_name, move_pdf, fetch_sheet_as_df
+from qdrant_utils import delete_records_by_pdf_id
+from library_utils import fetch_rows_by_status, remove_rows, append_new_rows
 from log_writer import log_event
 
 
 
-def archive_live(drive_client: DriveClient, sheets_client: SheetsClient):
+def archive_tagged(
+    drive_client: DriveClient,
+    sheets_client: SheetsClient,
+    qdrant_client: QdrantClient
+) -> pd.DataFrame:
+    """
+    Archives files and rows marked for deletion. Moves PDFs to PDF_ARCHIVE,
+    logs the action, removes Qdrant records, and removes rows from LIBRARY_UNIFIED.
+    """
+    TAGGED_STATUSES = ["live_for_archive"]
 
-    try:
-        library_unified_df = fetch_sheet(sheets_client, os.environ["LIBRARY_UNIFIED"])
-        library_unified_df["pdf_id"] = library_unified_df["pdf_id"].astype(str)
-    except Exception as e:
-        logging.error(f"Failed to load LIBRARY_UNIFIED: {e}")
-        return
+    library_df = fetch_sheet_as_df(sheets_client, os.environ["LIBRARY_UNIFIED"])
+    
+    # --- Find ROWS marked for archiving ---
+    rows_to_archive = fetch_rows_by_status(library_df, TAGGED_STATUSES)
+    if rows_to_archive.empty:
+        logging.info("No rows marked for archive. No further action taken.")
+        return pd.DataFrame()
 
-    rows_to_archive = library_unified_df[library_unified_df["status"] == "live_for_deletion"]
+    archived_rows = []
 
     for i, row in rows_to_archive.iterrows():
         pdf_id = row.get("pdf_id", "[unknown]")
         file_id = row.get("google_id")
-        filename = row.get("filename")
+        filename = row.get("pdf_file_name", "unknown_file.pdf")
+        row_index = library_df[library_df["pdf_id"] == pdf_id].index.tolist()
 
-        try:
-            move_pdf(drive_client, file_id, os.environ["PDF_ARCHIVE"])
-        except Exception as e:
-            logging.error(f"Failed to move file {file_id}: {e}")
-            continue
+        # --- MOVE FILE ---
+        move_pdf(drive_client, file_id, os.environ["PDF_ARCHIVE"])
 
-        add_row(
+         # --- DELETE RECORD ---
+        delete_records_by_pdf_id(qdrant_client, get_config("qdrant_collection_name"), pdf_id)
+
+        # --- MOVE ROW ---
+        row["timestamp_archived"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        append_new_rows(
             sheets_client,
             spreadsheet_id=os.environ["LIBRARY_ARCHIVE"],
-            tab_name="Sheet1",
-            row_data=row,
-            extra_columns=[datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")]
+            new_rows_df=pd.DataFrame([row]),
+            sheet_name="Sheet1"
         )
 
-        remove_row(
-            sheets_client,
-            spreadsheet_id=os.environ["LIBRARY_UNIFIED"],
-            tab_name="Sheet1",
-            row_index=i
-        )
+        try:
+            remove_rows(
+                sheets_client,
+                spreadsheet_id=os.environ["LIBRARY_UNIFIED"],
+                row_indices=row_index
+            )
+        except Exception as e:
+            logging.error(f"Failed to remove row {i} for {pdf_id}: {e}")
 
-        log_event("archived", pdf_id, filename)
+        archived_rows.append(row)
+        log_event(sheets_client, "archived", pdf_id, filename)
 
+    return pd.DataFrame(archived_rows)

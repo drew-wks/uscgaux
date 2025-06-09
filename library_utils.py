@@ -2,9 +2,11 @@ import os
 import logging
 import uuid
 from datetime import datetime, timezone
+from typing import Optional, Dict, List, Union
 import pandas as pd
 from pypdf import PdfReader
-from gcp_utils import fetch_sheet, get_as_dataframe
+from gcp_utils import fetch_sheet_as_df  
+
 
 
 def compute_pdf_id(pdf_bytes_io):
@@ -31,158 +33,7 @@ def compute_pdf_id(pdf_bytes_io):
         return None
 
 
-def pdf_to_Docs_via_pypdf(pdf_bytes_io, pdf_id=None):
-    """
-    Extract text documents from an in-memory PDF using pypdf.
-
-    Args:
-        pdf_bytes_io (BytesIO): In-memory bytes buffer containing the PDF data.
-        pdf_id (str, optional): An identifier for the PDF.
-
-    Returns:
-        list of dict: List of documents extracted from the PDF, each with text and metadata.
-    """
-    try:
-        logging.getLogger("pypdf").setLevel(logging.ERROR)
-        pdf_bytes_io.seek(0)
-        reader = PdfReader(pdf_bytes_io)
-        docs = []
-        for i, page in enumerate(reader.pages):
-            text = page.extract_text() or ""
-            doc = {
-                "page_number": i + 1,
-                "text": text,
-                "pdf_id": pdf_id
-            }
-            docs.append(doc)
-        return docs
-    except Exception as e:
-        logging.warning(f"Error extracting documents from PDF: {e}")
-        return []
-
-
-
-def get_planned_metadata_for_single_record(metadata_df, pdf_id):
-    """
-    Given a DataFrame of metadata and a pdf_id,
-    returns a dictionary of strings representing the document's metadata.
-    """
-    try:
-        # Find the metadata row that corresponds to this pdf_id
-        pdf_metadata = metadata_df[metadata_df['pdf_id'].str.strip().astype(str).str.lower() == pdf_id.lower()]
-
-        if pdf_metadata.empty:
-            raise ValueError(f"No metadata found for pdf_id: {pdf_id}")
-
-        # Confirm no duplicate pdf_ids
-        if len(pdf_metadata) > 1:
-            raise ValueError(f"Found duplicates for pdf_id '{pdf_id}' in metadata sheet.")
-
-        pdf_metadata = pdf_metadata.iloc[0].copy()
-        logging.info(f"Successfully accessed metadata for pdf_id: {pdf_id}")
-
-        # Confirm no duplicate publication_numbers
-        publication_number = pdf_metadata.get('publication_number', '')
-        if publication_number and metadata_df[metadata_df['publication_number'] == publication_number].shape[0] > 1:
-            raise ValueError(f"Found duplicates for publication_number: '{publication_number}'")
-
-        # Confirm no existing upsert date
-        if pd.notna(pdf_metadata.get('upsert_date')):
-            raise ValueError(f"Existing upsert_date found for pdf_id: {pdf_id}")
-
-        # Set the upsert date
-        pdf_metadata['upsert_date'] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        logging.info(f"Set upsert_date to {pdf_metadata['upsert_date']} for pdf_id: {pdf_id}")
-
-        # Format datetime fields correctly
-        for col in ['upsert_date', 'effective_date', 'expiration_date']:
-            if col in pdf_metadata.index:
-                try:
-                    parsed = pd.to_datetime(pdf_metadata[col], errors='raise', utc=True)
-                    pdf_metadata[col] = parsed.strftime('%Y-%m-%dT%H:%M:%SZ')
-                except Exception as e:
-                    raise ValueError(f"Invalid date format in '{col}' for pdf_id '{pdf_id}': {e}")
-
-        # Replace NaN with empty strings
-        pdf_metadata = pdf_metadata.fillna('')
-
-        # Cast everything to string (except booleans)
-        document_metadata = {
-            key: value if isinstance(value, bool) else str(value) if value is not None else ''
-            for key, value in pdf_metadata.to_dict().items()
-        }
-
-        # Confirm required fields
-        required_fields = ['title', 'scope', 'aux_specific', 'public_release', 'pdf_file_name', 'embedding']
-        for field in required_fields:
-            if field not in pdf_metadata or pd.isna(pdf_metadata[field]) or pdf_metadata[field] == '':
-                raise ValueError(f"Required field '{field}' is empty or missing for pdf_id '{pdf_id}'")
-
-        return document_metadata
-
-    except Exception as e:
-        logging.error(f"Error retrieving metadata for pdf_id {pdf_id}: {e}")
-        return None
-    
-
-def safe_append_rows_to_sheet(sheet_client, spreadsheet_id, new_rows_df, sheet_name="Sheet1"):
-    """
-    Safely append new rows to a Google Sheets tab,
-    skipping duplicates based on pdf_id, and return inserted entries.
-
-    Args:
-        sheet_client: Authenticated Google Sheets API client.
-        spreadsheet_id: ID of the target spreadsheet.
-        new_rows_df: Pandas DataFrame containing new rows to append.
-        sheet_name: Name of the tab (default = "Sheet1").
-
-    Returns:
-        list of dicts: Each dict has 'pdf_id' and 'pdf_file_name' of appended rows.
-    """
-    try:
-        if new_rows_df.empty:
-            logging.warning("No rows to append — DataFrame is empty.")
-            return []
-        
-        worksheet = sheet_client.open_by_key(spreadsheet_id).worksheet(sheet_name)
-
-        # Fetch existing rows
-        existing_rows = worksheet.get_all_values()
-        headers = existing_rows[0]
-        existing_pdf_ids = {
-            row[headers.index("pdf_id")].strip().lower()
-            for row in existing_rows[1:]
-            if len(row) > headers.index("pdf_id")
-        }
-
-        # Step 2: Filter new rows to exclude duplicates
-        safe_rows = []
-        safe_entries = []
-        for _, row in new_rows_df.iterrows():
-            pdf_id = str(row.get("pdf_id", "")).strip().lower()
-            pdf_file_name = row.get("pdf_file_name", "")
-            if pdf_id not in existing_pdf_ids:
-                row_ordered = {col: row.get(col, "") for col in headers}
-                safe_rows.append([row_ordered[col] for col in headers])
-                safe_entries.append(row_ordered)
-            else:
-                logging.warning(f"Duplicate detected, skipping pdf_id: {pdf_id}")
-
-        if safe_rows:
-            worksheet.append_rows(safe_rows, value_input_option="USER_ENTERED")
-            logging.info(f"Appended {len(safe_rows)} new unique rows to {sheet_name}")
-        else:
-            logging.info("No unique rows to append after duplicate check.")
-
-        return safe_entries
-
-    except Exception as e:
-        logging.error(f"Error appending rows to Google Sheet: {e}")
-        return []
-
-
-
-def validate_core_metadata(df):
+def validate_core_metadata_format(df):
     """
     Validates that the catalog DataFrame contains required columns.
 
@@ -200,7 +51,7 @@ def validate_core_metadata(df):
 
     if missing_columns:
         raise ValueError(
-            f"The catalog is missing required columns: {missing_columns}. Please fix the sheet structure before continuing."
+            f"The catalog is missing required core metadata columns: {missing_columns}. Please fix the sheet structure before continuing."
         )
 
 
@@ -208,9 +59,9 @@ def validate_core_metadata(df):
 
 
 
-def validate_rows(sheets_client):
+def validate_all_rows_format(df):
     """
-    Validates all rows in the spreadsheet regardless of status.
+    Validates all rows in the dataframe regardless of status.
 
     - Required fields (except ignored) must be non-empty
     - All fields must be strings, except for aux_specific and public_release
@@ -223,19 +74,8 @@ def validate_rows(sheets_client):
         invalid_df (DataFrame): rows that failed one or more validation checks, with an 'issues' column
         log_df (DataFrame): DataFrame of log entries for valid and invalid cases
     """
-    spreadsheet_id = os.environ["LIBRARY_UNIFIED"]
-
-    try:
-        sheet = fetch_sheet(sheets_client, spreadsheet_id)
-        if sheet is None:
-            logging.error(f"[validate_rows] Sheet not found for ID: {spreadsheet_id}")
-            return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
-        df = get_as_dataframe(sheet, evaluate_formulas=True, dtype=str)
-        df = df.fillna('')
-        logging.debug(f"[get_as_dataframe] Column dtypes: {df.dtypes.to_dict()}")
-    except Exception as e:
-        logging.error(f"[get_as_dataframe] Failed to convert worksheet to DataFrame: {e}")
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+        
+    df = df.fillna('')
 
     headers = df.columns.tolist()
     ignored_fields = {"publication_number", "organization", "unit", "upsert_date", "status", "status_timestamp"}
@@ -325,6 +165,141 @@ def validate_rows(sheets_client):
 
 
 
+def find_duplicates_against_reference(
+    df_to_check: pd.DataFrame,
+    reference_df: Optional[pd.DataFrame] = None,
+    fields_to_check: Optional[Union[Dict[str, str], List[Dict[str, str]]]] = None
+) -> pd.DataFrame:
+    """
+    Finds rows in df_to_check that are duplicates against reference_df or specific field-value criteria.
+
+    Args:
+        df_to_check (pd.DataFrame): DataFrame containing rows to evaluate.
+        reference_df (pd.DataFrame, optional): The DataFrame to compare against. If None, defaults to df_to_check.
+        fields_to_check (dict or list of dicts, optional): One or more {column: value} dictionaries to look for in the reference_df.
+
+    Returns:
+        pd.DataFrame: A DataFrame of duplicate rows matched against the reference or criteria. Empty if no duplicates.
+
+    Behavior:
+        - If `fields_to_check` is provided, it filters `reference_df` for matching field-value pairs.
+        - If `fields_to_check` is not provided, it performs a row-level duplicate check between df_to_check and reference_df.
+        - Skips any blank or None values in the key-value criteria.
+        - Logs warnings for any matches found.
+
+    Usage Examples:
+    ----------------
+    1. Match by a single key:
+        >>> find_duplicates_against_reference(
+        ...     df_to_check=new_df,
+        ...     reference_df=library_df,
+        ...     fields_to_check={"pdf_id": "abc123"}
+        ... )
+
+    2. Match by multiple keys:
+        >>> find_duplicates_against_reference(
+        ...     df_to_check=new_df,
+        ...     reference_df=library_df,
+        ...     fields_to_check=[{"pdf_id": "abc123"}, {"google_id": "1A2B3C4D"}]
+        ... )
+
+    3. Full row-level comparison:
+        >>> find_duplicates_against_reference(
+        ...     df_to_check=new_df,
+        ...     reference_df=library_df
+        ... )
+
+    4. Self-duplicate check:
+        >>> find_duplicates_against_reference(
+        ...     df_to_check=library_df
+        ... )
+
+    Notes:
+        - The return value is suitable for inspection, logging, or filtering.
+        - No exceptions are raised; all findings are returned as a DataFrame and optionally logged.
+
+    """
+    if reference_df is None:
+        reference_df = df_to_check
+
+    if fields_to_check:
+        # Normalize to list of dicts
+        if isinstance(fields_to_check, dict):
+            fields_to_check = [fields_to_check]
+
+        matches = []
+        for criteria in fields_to_check:
+            filtered_ref = reference_df.copy()
+            for field, value in criteria.items():
+                if not value or str(value).strip() == "":
+                    continue
+                if field not in reference_df.columns:
+                    logging.warning(f"Field '{field}' not found in reference_df. Skipping.")
+                    continue
+                filtered_ref = filtered_ref[filtered_ref[field].astype(str) == str(value).strip()]
+            if not filtered_ref.empty:
+                matches.append(filtered_ref)
+
+        if matches:
+            result = pd.concat(matches).drop_duplicates()
+            logging.warning(f"⚠️ {len(result)} duplicates found based on provided field(s).")
+            return result
+        logging.info("✅ No duplicates found based on provided field(s).")
+        return pd.DataFrame()
+
+    # Default behavior: detect exact row duplicates between the two DataFrames
+    common_columns = list(set(df_to_check.columns) & set(reference_df.columns))
+    merged = df_to_check.merge(reference_df, how="inner", on=common_columns)
+    if not merged.empty:
+        logging.warning(f"⚠️ {len(merged)} duplicate row(s) found in reference.")
+    else:
+        logging.info("✅ No duplicate rows found in reference.")
+    return merged
+
+
+
+def get_planned_metadata_for_single_record(metadata_df, pdf_id):
+    """
+    Given a DataFrame of metadata and a pdf_id,
+    returns a dictionary of strings representing the document's metadata.
+    """
+    try:
+        # Find the metadata row that corresponds to this pdf_id
+        pdf_metadata = metadata_df[metadata_df['pdf_id'].str.strip().astype(str).str.lower() == pdf_id.lower()]
+
+        if pdf_metadata.empty:
+            raise ValueError(f"No metadata found for pdf_id: {pdf_id}")
+
+        # Confirm no duplicate pdf_ids
+        if len(pdf_metadata) > 1:
+            raise ValueError(f"Found duplicates for pdf_id '{pdf_id}' in metadata sheet.")
+
+        pdf_metadata = pdf_metadata.iloc[0].copy()
+        logging.info(f"Successfully accessed metadata for pdf_id: {pdf_id}")
+
+
+        # Confirm no existing upsert date
+        if pd.notna(pdf_metadata.get('upsert_date')):
+            raise ValueError(f"Existing upsert_date found for pdf_id: {pdf_id}")
+
+        # Set the upsert date
+        pdf_metadata['upsert_date'] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        logging.info(f"Set upsert_date to {pdf_metadata['upsert_date']} for pdf_id: {pdf_id}")
+
+
+        # Cast everything to string (except booleans)
+        document_metadata = {
+            key: value if isinstance(value, bool) else str(value) if value is not None else ''
+            for key, value in pdf_metadata.to_dict().items()
+        }
+
+        return document_metadata
+
+    except Exception as e:
+        logging.error(f"Error retrieving metadata for pdf_id {pdf_id}: {e}")
+        return None
+
+
 
 def fetch_rows_by_status(catalog_df, keywords):
     """
@@ -369,14 +344,56 @@ def remove_rows(sheets_client, spreadsheet_id, row_indices, sheet_name="Sheet1")
         sheet_name: Name of the worksheet/tab (default = "Sheet1").
     """
     try:
-        ws = sheets_client.open_by_key(spreadsheet_id).worksheet(sheet_name)
+        sheet = sheets_client.open_by_key(spreadsheet_id).worksheet(sheet_name)
 
         # Sort in reverse to prevent index shifting
         for row_index in sorted(row_indices, reverse=True):
-            gsheet_row = row_index + 2  # account for 1-indexing + header row
-            ws.delete_rows(gsheet_row)
-            logging.info(f"Deleted row {row_index} (sheet row {gsheet_row}) from {sheet_name}")
+            row = row_index + 2  # account for 1-indexing + header row
+            sheet.delete_rows(row)
+            logging.info(f"Deleted row {row_index} (sheet row {row}) from {sheet_name}")
 
     except Exception as e:
         logging.error(f"Failed to delete rows from {sheet_name}: {e}")
 
+
+
+
+def append_new_rows(sheets_client, spreadsheet_id, new_rows_df, sheet_name = "Sheet1"):
+    """
+    Appends new rows to a Google Sheet tab in column order, assuming no duplicates.
+
+    Args:
+        sheets_client (SheetsClient): Authenticated Google Sheets client.
+        spreadsheet_id (str): ID of the Google Spreadsheet.
+        new_rows_df (pd.DataFrame): Rows to append.
+        sheet_name (str): Tab name in the spreadsheet (default = "Sheet1").
+
+    Returns:
+        List[Dict]: Rows that were appended, ordered to match the sheet.
+    """
+    try:
+        if new_rows_df.empty:
+            logging.warning("No rows to append — DataFrame is empty.")
+            return []
+
+        existing_df = fetch_sheet_as_df(sheets_client, spreadsheet_id)
+        headers = list(existing_df.columns)
+        sheet = sheets_client.open_by_key(spreadsheet_id).worksheet(sheet_name)
+
+        rows_to_append = []
+        appended_dicts = []
+
+        for _, row in new_rows_df.iterrows():
+            row_dict = {col: row.get(col, "") for col in headers}
+            row_list = [row_dict[col] for col in headers]
+            rows_to_append.append(row_list)
+            appended_dicts.append(row_dict)
+
+        sheet.append_rows(rows_to_append, value_input_option="USER_ENTERED")
+        logging.info(f"✅ Appended {len(rows_to_append)} new row(s) to {sheet_name}")
+
+        return appended_dicts
+
+    except Exception as e:
+        logging.error(f"❌ Error in append_new_rows: {e}")
+        return []
