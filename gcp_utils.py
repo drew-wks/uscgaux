@@ -180,6 +180,7 @@ def fetch_sheet_as_df(sheets_client: SheetsClient, spreadsheet_id: str) -> pd.Da
             logging.error(f"Worksheet {spreadsheet_id} is empty.")
             return pd.DataFrame()
         df = get_as_dataframe(sheet, evaluate_formulas=True, dtype=str)
+        df = df.fillna("")  # Prevents NaN values
         return df
     except Exception as e:
         logging.error(f"[fetch_sheet_as_df] Failed to convert worksheet to DataFrame: {e}")

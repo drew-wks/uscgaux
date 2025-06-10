@@ -15,10 +15,11 @@ import os
 from datetime import datetime, timezone
 import logging
 import pandas as pd
-from typing import List
+from typing import IO, List
+from streamlit.runtime.uploaded_file_manager import UploadedFile
 from gspread.client import Client as SheetsClient
 from googleapiclient.discovery import Resource as DriveClient
-from library_utils import compute_pdf_id, find_duplicates_against_reference, safe_append_rows_to_sheet, validate_core_metadata_format
+from library_utils import compute_pdf_id, find_duplicates_against_reference, validate_core_metadata_format
 from gcp_utils import upload_pdf, fetch_sheet_as_df
 from log_writer import log_event
 
@@ -26,12 +27,12 @@ from log_writer import log_event
 set_env_vars()
 
 
-def propose_new_files(drive_client: DriveClient, sheets_client: SheetsClient, uploaded_files: List[UploadedFile]):
+def propose_new_files(drive_client: DriveClient, sheets_client: SheetsClient, uploaded_files: List[IO[bytes]]):
     """
     Processes and uploads Streamlit-uploaded PDF files, checking for duplicates and appending metadata.
 
     Args:
-        uploaded_files (List[UploadedFile]): List of uploaded PDF files from Streamlit.
+        uploaded_files (List[UploadedFile]): List of uploaded PDF files. Uploaded_files must be objects with .name and .read() methods. Most file-like objects, including io.BytesIO, tempfile, and UploadedFile, and Streamlit's UploadedFile satisfy this.
 
     Returns:
         tuple: (new_rows_df, failed_files, duplicate_files)

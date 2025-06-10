@@ -5,27 +5,28 @@ from gspread.client import Client as SheetsClient
 from googleapiclient.discovery import Resource as DriveClient
 from qdrant_client import QdrantClient
 from env_config import get_config
-from gcp_utils import move_pdf, fetch_sheet_as_df
+from gcp_utils import move_pdf, fetch_sheet_as_df, fetch_sheet
 from library_utils import validate_core_metadata_format, find_duplicates_against_reference, validate_all_rows_format
 from qdrant_utils import in_qdrant
 from langchain_utils import pdf_to_Docs_via_Drive
 from log_writer import log_event
 
 
-TARGET_STATUSES = ["new_validated", "clonedlive_validated"]
 
 def promote_files(drive_client: DriveClient, sheets_client: SheetsClient, qdrant_client: QdrantClient):
     
+    # VALIDATE all rows
     library_df = fetch_sheet_as_df(sheets_client, os.environ["LIBRARY_UNIFIED"])
-    
-    
     valid_df, invalid_df, log_df = validate_all_rows_format(library_df)
 
     if not invalid_df.empty:
         logging.error(f"LIBRARY_UNIFIED validation failed: {len(invalid_df)} invalid row(s) found. Promotion halted.")
         return
     
-    # Ensure only one validated row exists for this pdf_id
+
+    TARGET_STATUSES = ["new_validated", "clonedlive_validated"]
+    
+    # Ensure only one row in TARGET_STATUS exists for this pdf_id
     to_promote_df = valid_df[valid_df["status"].isin(TARGET_STATUSES)]
     duplicate_rows = find_duplicates_against_reference(
     df_to_check=to_promote_df,
@@ -35,7 +36,10 @@ def promote_files(drive_client: DriveClient, sheets_client: SheetsClient, qdrant
         logging.error(f"{len(duplicate_rows)} duplicate validated pdf_id(s) found. Promotion halted.")
         return
 
-    for _, row in valid_df.iterrows():
+    to_promote_df = to_promote_df.reset_index(drop=True)
+    
+    # Push to LIVE
+    for idx, row in to_promote_df.iterrows():
         if row.get("status") not in TARGET_STATUSES:
             continue
 
@@ -62,12 +66,9 @@ def promote_files(drive_client: DriveClient, sheets_client: SheetsClient, qdrant
 
         # Change status in LIBRARY_UNIFIED → live
         row["status"] = "live"
-        row["timestamp_promoted"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        sheet.values_update(
-            "Sheet1" + f"!A{_+2}",
-            params={"valueInputOption": "RAW"},
-            body={"values": [list(row.values())]},
-        )
+        row["status_timestamp"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        sheet = fetch_sheet(sheets_client, os.environ["LIBRARY_UNIFIED"])
+        sheet.update(f"A{idx+2}", [row.tolist()])
 
         log_event(sheets_client, "promoted_to_live", pdf_id, filename)
 

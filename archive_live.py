@@ -34,12 +34,12 @@ def archive_tagged(
     Archives files and rows marked for deletion. Moves PDFs to PDF_ARCHIVE,
     logs the action, removes Qdrant records, and removes rows from LIBRARY_UNIFIED.
     """
-    TAGGED_STATUSES = ["live_for_archive"]
+    TARGET_STATUSES = ["live_for_archive"]
 
     library_df = fetch_sheet_as_df(sheets_client, os.environ["LIBRARY_UNIFIED"])
     
     # --- Find ROWS marked for archiving ---
-    rows_to_archive = fetch_rows_by_status(library_df, TAGGED_STATUSES)
+    rows_to_archive = fetch_rows_by_status(library_df, TARGET_STATUSES)
     if rows_to_archive.empty:
         logging.info("No rows marked for archive. No further action taken.")
         return pd.DataFrame()

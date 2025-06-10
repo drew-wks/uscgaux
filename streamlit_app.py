@@ -5,7 +5,7 @@ st.set_page_config(page_title="ASK Auxiliary Source of Knowledge",
                    initial_sidebar_state="collapsed")
 from env_config import set_env_vars
 set_env_vars()
-from library_utils import validate_rows_format
+from library_utils import validate_all_rows_format
 from gcp_utils import init_sheets_client, init_drive_client, fetch_sheet_as_df
 from qdrant_utils import init_qdrant_client
 from propose_new_files import propose_new_files
@@ -137,7 +137,7 @@ with tabs[1]:
         with content_col:
             if st.button("Validate rows format", key="validate_rows_format", type="secondary"):
                 with st.spinner("Searching rows, PDFs, and records..."):
-                    valid_df, invalid_df, log_df = validate_rows_format(sheets_client)
+                    valid_df, invalid_df, log_df = validate_all_rows_format(sheets_client)
                 if invalid_df.empty:
                     st.success("✅ No invalid rows found.")
                 else:

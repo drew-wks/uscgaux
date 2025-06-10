@@ -212,7 +212,7 @@ def get_all_pdf_ids_in_qdrant(client: QdrantClient, collection_name: str) -> Lis
             if pdf_id:
                 unique_pdf_ids.add(str(pdf_id))
 
-        logging.info(f"Retrieving all pdf_ids from Qdrant collection. Found {len(unique_pdf_ids)} unique pdf_ids.")
+        logging.info(f"Retrieving all {len(unique_pdf_ids)} pdf_ids from Qdrant collection.")
         return list(unique_pdf_ids)
 
     except Exception as e:

@@ -8,7 +8,7 @@ from qdrant_client import QdrantClient
 from env_config import get_config
 from gcp_utils import list_pdfs_in_folder, fetch_sheet, fetch_sheet_as_df
 from qdrant_utils import get_all_pdf_ids_in_qdrant
-
+from IPython.display import display, HTML
 
 
 def flag_rows_as_orphans(sheet, df: pd.DataFrame, orphan_rows: pd.DataFrame) -> list[dict]:
@@ -26,7 +26,7 @@ def flag_rows_as_orphans(sheet, df: pd.DataFrame, orphan_rows: pd.DataFrame) -> 
     """
     log_entries = []
     updates = []
-
+     
     for _, row in orphan_rows.iterrows():
         pdf_id = row["pdf_id"]
         google_id = row.get("google_id", "unknown_id")
@@ -165,7 +165,7 @@ def find_orphans(drive_client: DriveClient, sheets_client: SheetsClient, qdrant_
             - log_entries (DataFrame)
     """
     library_df = fetch_sheet_as_df(sheets_client, os.environ["LIBRARY_UNIFIED"])
-
+    
     if library_df.empty or "google_id" not in library_df.columns or "pdf_id" not in library_df.columns:
         raise ValueError("LIBRARY_UNIFIED missing required columns (google_id, pdf_id) or is empty")
 

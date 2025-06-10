@@ -36,17 +36,17 @@ def log_event(sheets_client: SheetsClient, action: str, pdf_id: str, filename: s
         "action": action,
         "pdf_id": pdf_id,
         "pdf_file_name": filename,
-        "extra": extra_columns
+        "extra_columns": extra_columns
     }
 
-    log_events([event], sheets_client, event_log_id) # type: ignore
+    log_events(sheets_client, [event], event_log_id) # type: ignore
     return event
 
 
 def log_events(
     sheets_client: SheetsClient,
     events: List[Dict[str, Any]],
-    event_log_id: Optional[str] = None
+    event_log_id: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
     Append multiple rows to the ADMIN_EVENT_LOG tab and return the timestamped events.
@@ -58,7 +58,7 @@ def log_events(
                 "action": str,
                 "pdf_id": str,
                 "pdf_file_name": str,
-                "extra": Optional[List[Any]]
+                "extra_columns": Optional[List[Any]]
             }
         event_log_id (str): Optional ID of the spreadsheet. Falls back to env var.
 
@@ -70,6 +70,7 @@ def log_events(
     try:
         spreadsheet_id = event_log_id or os.environ["EVENT_LOG"]
         ws = sheets_client.open_by_key(spreadsheet_id).worksheet("Sheet1")
+        headers = ws.row_values(1)
 
         rows = []
         for e in events:
@@ -80,24 +81,35 @@ def log_events(
                 "pdf_id": e["pdf_id"],
                 "pdf_file_name": e["pdf_file_name"]
             }
-            row_values = [timestamp, e["action"], e["pdf_id"], e["pdf_file_name"]]
 
-            if e.get("extra"):
-                event["extra"] = e["extra"]
-                row_values.extend(e["extra"])
+            row_data = {
+                "timestamp": timestamp,
+                "action": e["action"],
+                "pdf_id": e["pdf_id"],
+                "pdf_file_name": e["pdf_file_name"]
+            }
 
+            if e.get("extra_columns"):
+                event["extra_columns"] = e["extra_columns"]
+                for idx, extra_val in enumerate(e["extra_columns"]):
+                    key = f"extra_{idx+1}"
+                    row_data[key] = extra_val
+
+            # Ensure row is aligned with the headers
+            row_values = [row_data.get(col, "") for col in headers]
             rows.append(row_values)
             logged_events.append(event)
 
-        ws.append_rows(rows, value_input_option="USER_ENTERED") # type: ignore
+        ws.append_rows(rows, value_input_option="USER_ENTERED")  # type: ignore
 
-        log_url = f"https://docs.google.com/spreadsheets/d/{os.environ['EVENT_LOG']}"
+        log_url = f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}"
         logging.info(f"Admin event log written to: {log_url}")
 
     except Exception as e:
         logging.error(f"Failed to append log batch: {e}")
 
     return logged_events
+
 
 
 

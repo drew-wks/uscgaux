@@ -74,15 +74,20 @@ def validate_all_rows_format(df):
         invalid_df (DataFrame): rows that failed one or more validation checks, with an 'issues' column
         log_df (DataFrame): DataFrame of log entries for valid and invalid cases
     """
-        
-    df = df.fillna('')
+    
 
     headers = df.columns.tolist()
-    ignored_fields = {"publication_number", "organization", "unit", "upsert_date", "status", "status_timestamp"}
-    required_fields = [col for col in headers if col not in ignored_fields]
+    optional_fields = {"publication_number", "organization", "unit", "upsert_date", "status", "status_timestamp"}
+    required_fields = [col for col in headers if col not in optional_fields]
     date_fields = {"issue_date", "upsert_date", "expiration_date", "status_timestamp"}
     bool_fields = {"aux_specific", "public_release"}
 
+    # Fill NaNs in optional fields
+    for field in optional_fields:
+        if field in df.columns:
+            df[field] = df[field].fillna("")
+            
+            
     valid_rows = []
     invalid_rows = []
     log_entries = []
