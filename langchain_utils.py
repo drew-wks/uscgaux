@@ -94,7 +94,7 @@ def pdf_to_Docs_via_Drive(
 
 
 
-def chunk_documents(
+def chunk_Docs(
     docs_pages: List[Document],
     RAG_CONFIG: Dict[str, Any]
 ) -> List[Document]:
@@ -112,10 +112,10 @@ def chunk_documents(
         Exception: If any error occurs during chunking.
     """
     try:
-        chunk_size=rag_config("chunk_size"),
-        chunk_overlap=rag_config("chunk_overlap"),
-        length_function=rag_config("length_function"),
-        separators=rag_config("separators")
+        chunk_size=RAG_CONFIG["chunk_size"],
+        chunk_overlap=RAG_CONFIG["chunk_overlap"],
+        length_function=RAG_CONFIG["length_function"],
+        separators=RAG_CONFIG["separators"]
     except KeyError as e:
         logging.error("Missing required RAG_CONFIG key: %s", e)
         raise
@@ -135,3 +135,4 @@ def chunk_documents(
     except Exception as e:
         logging.error("Failed to chunk documents: %s", e)
         raise
+
