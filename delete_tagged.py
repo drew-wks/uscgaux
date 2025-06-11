@@ -1,14 +1,12 @@
-import os
 import logging
 from gspread.client import Client as SheetsClient
 from googleapiclient.discovery import Resource as DriveClient
 from qdrant_client import QdrantClient
-from env_config import rag_config
+from env_config import rag_config, env_config
 from library_utils import fetch_rows_by_status, remove_rows
 from gcp_utils import get_folder_name, fetch_sheet_as_df, file_exists
 from qdrant_utils import delete_records_by_pdf_id, in_qdrant
 from log_writer import log_event
-from env_config import env_config
 
 config = env_config()
 
@@ -24,14 +22,19 @@ def delete_tagged(drive_client: DriveClient, sheets_client: SheetsClient, qdrant
         logging.info("No rows marked for deletion. No further action taken.")
         return
 
+    duplicates_df = library_df[library_df.duplicated(subset="pdf_id", keep=False)]
+    
+    if not duplicates_df.empty:
+        logging.error(f"❌ Rows with duplicate pdf_ids found. Handle/remove duplicates before attempting deletion. No further action taken.{duplicates_df}")
+        return
+    
     deleted_rows = []
 
     for i, row in rows_to_delete.iterrows():
-        file_id = row.get("google_id")
-        pdf_id = row.get("pdf_id")
-        filename = row.get("pdf_file_name", "unknown_file.pdf")
-        original_status = row.get("status", "unknown_status")
-        row_index = library_df[library_df["pdf_id"] == pdf_id].index.tolist()
+        file_id = str(row.get("google_id", ""))
+        pdf_id = str(row.get("pdf_id", ""))
+        filename = str(row.get("pdf_file_name", "unknown_file"))
+        original_status = str(row.get("status", "unknown_status"))
 
         # --- DELETE FILE ---
         folder_name = "unknown_folder"
@@ -72,7 +75,13 @@ def delete_tagged(drive_client: DriveClient, sheets_client: SheetsClient, qdrant
 
         # --- DELETE ROW FROM SHEET ---
         try:
-            remove_rows(sheets_client, config["LIBRARY_UNIFIED"], row_indices=row_index)
+            row_indices = library_df[library_df["pdf_id"] == pdf_id].index.tolist()
+
+            if not row_indices:
+                logging.warning(f"No matching row index found for pdf_id {pdf_id}. Skipping row deletion.")
+                continue
+           
+            remove_rows(sheets_client, config["LIBRARY_UNIFIED"], row_indices=row_indices)
             log_event(sheets_client, "deleted", pdf_id, filename, extra_columns=[original_status, folder_name])
         except Exception as e:
             logging.error("Failed to remove row for %s: %s", pdf_id, e)
@@ -80,5 +89,3 @@ def delete_tagged(drive_client: DriveClient, sheets_client: SheetsClient, qdrant
         deleted_rows.append(row)
 
     return rows_to_delete
-
-

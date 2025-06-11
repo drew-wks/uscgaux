@@ -158,7 +158,9 @@ def fetch_sheet(sheets_client: SheetsClient, spreadsheet_id: str) -> Worksheet |
         None: If there is an error.
     """
     try:
-        return sheets_client.open_by_key(spreadsheet_id).sheet1
+        sheet = sheets_client.open_by_key(spreadsheet_id).sheet1
+        logging.info(sheet.title)
+        return sheet
     except Exception as e:
         logging.error("[fetch_sheet] Failed to fetch worksheet: %s", e)
         return None
