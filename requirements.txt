@@ -9,7 +9,6 @@ langchain-openai
 openai 
 langchain-community 
 langchain-qdrant 
-
 qdrant-client 
 pympler 
 pypdf==5.0.1
@@ -17,5 +16,5 @@ openpyxl
 PyYAML
 requests
 streamlit-authenticator
-
-dotenv
+python-dotenv
+unstructured
