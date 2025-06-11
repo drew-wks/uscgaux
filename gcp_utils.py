@@ -29,7 +29,7 @@ def get_gcp_credentials() -> Credentials:
         creds_dict = json.loads(creds_json)
         return Credentials.from_service_account_info(creds_dict)
     except Exception as e:
-        raise ValueError(f"Failed to load GCP credentials from environment: {e}")
+        raise ValueError(f"Failed to load GCP credentials from environment: {e}") from e
 
 
 def init_drive_client(creds: Credentials) -> DriveClient:
@@ -169,7 +169,7 @@ def fetch_sheet_as_df(sheets_client: SheetsClient, spreadsheet_id: str) -> pd.Da
     Fetches the first worksheet from a Google Sheet by ID and returns its contents as a DataFrame with all fields forced to string. Booleans can get converted later if needed.
 
     Args:
-        sheets_client (GSpreadClient): An authenticated gspread client.
+        sheets_client (SheetsClient): An authenticated gspread client.
         spreadsheet_id (str): The ID of the Google Spreadsheet.
 
     Returns:
@@ -181,12 +181,15 @@ def fetch_sheet_as_df(sheets_client: SheetsClient, spreadsheet_id: str) -> pd.Da
         if sheet is None:
             logging.error("Worksheet %s is empty.", spreadsheet_id)
             return pd.DataFrame()
-        df = get_as_dataframe(sheet, evaluate_formulas=True, dtype=str)
+
+        df: pd.DataFrame = get_as_dataframe(sheet, evaluate_formulas=True, dtype=str)
         df = df.fillna("")  # Prevents NaN values
         return df
+
     except Exception as e:
         logging.error("[fetch_sheet_as_df] Failed to convert worksheet to DataFrame: %s", e)
         return pd.DataFrame()
+
     
 
 def upload_pdf(drive_client: DriveClient, file_obj, file_name: str, folder_id: str) -> None:

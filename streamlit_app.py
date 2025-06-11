@@ -1,19 +1,20 @@
-import os
 import base64
+import logging
+from typing import cast, List
 import streamlit as st
 st.set_page_config(page_title="ASK Auxiliary Source of Knowledge",
                    initial_sidebar_state="collapsed")
 from env_config import env_config
-from typing import Tuple
 from gcp_utils import get_gcp_credentials, init_sheets_client, init_drive_client
 from qdrant_utils import init_qdrant_client
 from gcp_utils import fetch_sheet_as_df
 from library_utils import validate_all_rows_format
-from propose_new_files import propose_new_files
+from propose_new_files import propose_new_files, FileLike
 from cleanup_orphans import find_orphans
 from promote_files import promote_files
 from delete_tagged import delete_tagged
 from ui_utils import init_auth, apply_styles, init_cached_clients, get_library_catalog_excel_and_date
+
 
 config = env_config()
 init_auth()
@@ -43,7 +44,7 @@ with tabs[0]:
     if uploaded_files:
         with st.spinner("Uploading & scanning PDFs for duplicates..."):
             new_rows_df, failed_files, duplicate_files = propose_new_files(
-                drive_client, sheets_client, uploaded_files)
+                drive_client, sheets_client, cast(List[FileLike], uploaded_files))
         if not new_rows_df.empty:
             st.success("Added new PDF(s)...")
             st.dataframe(new_rows_df)
@@ -178,23 +179,31 @@ with tabs[2]:
 
 with tabs[3]:
     st.write("")
-    qdrant_df, last_update_date = get_library_catalog_excel_and_date()
+
     try:
+        qdrant_df, last_update_date = get_library_catalog_excel_and_date()
+
         if qdrant_df is not None:
             num_items_qdrant = len(qdrant_df)
-            st.markdown(
-                f"**Qdrant DB:** {num_items_qdrant} items. Last update: {last_update_date}")
+            st.markdown(f"**Qdrant DB:** {num_items_qdrant} items. Last update: {last_update_date}")
 
-            # Display the DataFrame
-            st.data_editor(qdrant_df, use_container_width=True,
-                           hide_index=False, disabled=True)
-            isim = f'ASK_catalog_export{last_update_date}.csv'
-            indir = qdrant_df.to_csv(index=False)
-            b64 = base64.b64encode(indir.encode(
-                encoding='utf-8')).decode(encoding='utf-8')
-            linko_final = f'<a href="data:file/csv;base64,{b64}" download="{isim}">Click to download the catalog</a>'
-            st.markdown(linko_final, unsafe_allow_html=True)
+            # Show read-only table
+            st.data_editor(qdrant_df, use_container_width=True, hide_index=False, disabled=True)
+
+            try:
+                csv_string = qdrant_df.to_csv(index=False)
+                b64 = base64.b64encode(csv_string.encode("utf-8")).decode("utf-8")
+                file_name = f'ASK_catalog_export{last_update_date}.csv'
+                download_link = f'<a href="data:file/csv;base64,{b64}" download="{file_name}">Click to download the catalog</a>'
+                st.markdown(download_link, unsafe_allow_html=True)
+
+            except (AttributeError, TypeError, UnicodeEncodeError) as e:
+                logging.exception("Error exporting catalog to CSV")
+                st.error("Something went wrong while preparing the download link.")
         else:
             st.warning("⚠️ No data to display or export.")
-    except Exception as e:
-        st.error(f"Error accessing report: {e}")
+
+    except (ValueError, TypeError) as e:
+        logging.exception("Error loading catalog data")
+        st.error("Could not load the catalog data. Please try again later.")
+

@@ -1,16 +1,13 @@
-import os
 import logging
-from typing import List, Dict, Union
+from typing import List, Union
 import pandas as pd
 from qdrant_client import QdrantClient
 from qdrant_client.http import exceptions as qdrant_exceptions
 from qdrant_client import models
-
-from env_config import RAG_CONFIG
-
-from env_config import env_config
+from env_config import env_config, RAG_CONFIG
 
 config = env_config()
+
 
 def init_qdrant_client(mode: str = "cloud") -> QdrantClient:
     """
@@ -38,25 +35,38 @@ def init_qdrant_client(mode: str = "cloud") -> QdrantClient:
             )
         else:
             raise ValueError(f"Invalid mode '{mode}'. Qdrant client must be 'cloud' or 'local'.")
-    except Exception as e:
-        logging.error("Failed to initialize Qdrant client: %s", e)
+
+        # Confirm configured collection exists
+        collections = list_collections(client)
+
+        if not collections:
+            logging.warning("No collections found in Qdrant.")
+        else:
+            logging.info("Available Qdrant collections: %s", collections)
+
+        expected_collection = RAG_CONFIG.get("qdrant_collection_name")
+        if expected_collection in collections:
+            logging.info("✅ Confirmed Qdrant collection '%s' exists", expected_collection)
+        else:
+            logging.error("❌ Collection '%s' not found in Qdrant!", expected_collection)
+            raise ValueError(f"Collection '{expected_collection}' does not exist in Qdrant.")
+
+        return client
+
+    except qdrant_exceptions.UnexpectedResponse as e:
+        if "404" in str(e):
+            logging.warning("The server returned a 404 Not Found — server is reachable, but URL or endpoint may be wrong.")
+        else:
+            logging.exception("Unexpected response from Qdrant")
         raise
 
-    # Confirm configured collection exists
-    collections = list_collections(client)
-    if not collections:
-        logging.warning("No collections found in Qdrant.")
-    else:
-        logging.info("Available Qdrant collections: %s", collections)
+    except (qdrant_exceptions.ResponseHandlingException, TypeError, ValueError):
+        logging.exception("An unexpected error occurred during Qdrant client initialization or collection verification.")
+        raise
 
-    expected_collection = RAG_CONFIG.get("qdrant_collection_name")
-    if expected_collection in collections:
-        logging.info("✅ Confirmed Qdrant collection '%s' exists", expected_collection)
-    else:
-        logging.error("❌ Collection '%s' not found in Qdrant!", expected_collection)
-        raise ValueError(f"Collection '{expected_collection}' does not exist in Qdrant.")
-
-    return client
+    except Exception:
+        logging.exception("General failure during Qdrant client setup.")
+        raise
 
 
 
@@ -72,7 +82,7 @@ def which_qdrant(client: QdrantClient) -> str:
         str: 'local', 'cloud', or 'unknown'.
     """
     try:
-        client_type = str(type(client._client)).lower()
+        client_type = str(type(client._client)).lower() 
 
         if "qdrant_local" in client_type:
             qdrant_location = "local"
@@ -89,8 +99,9 @@ def which_qdrant(client: QdrantClient) -> str:
         else:
             raise
         qdrant_location = "unknown"
-    except Exception as e:
-        logging.warning("An unexpected error occurred while detecting Qdrant location: %s", e)
+    except (qdrant_exceptions.ResponseHandlingException,
+                TypeError, ValueError):
+        logging.exception("An unexpected error occurred while detecting Qdrant location: %s")
         qdrant_location = "unknown"
 
     return qdrant_location
@@ -110,8 +121,10 @@ def list_collections(client: QdrantClient) -> List[str]:
         collections = client.get_collections()
         collection_names = [col.name for col in collections.collections]
         return collection_names
-    except Exception as e:
-        logging.warning("Error listing collections: %s", e)
+    except (qdrant_exceptions.UnexpectedResponse,
+                qdrant_exceptions.ResponseHandlingException,
+                TypeError, ValueError):
+        logging.exception("Error listing collections: %s")
         return []
 
 
@@ -147,8 +160,10 @@ def in_qdrant(client: QdrantClient, collection_name: str, pdf_id: str) -> bool:
         exists = len(search_result) > 0
         logging.info("PDF ID '%s' existence in collection '%s': %s", pdf_id, collection_name, exists)
         return exists
-    except Exception as e:
-        logging.warning("Error checking PDF ID in Qdrant: %s", e)
+    except (qdrant_exceptions.UnexpectedResponse,
+                qdrant_exceptions.ResponseHandlingException,
+                TypeError, ValueError):
+        logging.exception("Error checking PDF ID in Qdrant: %s")
         return False
 
 
@@ -170,8 +185,10 @@ def check_record_exists(client: QdrantClient, collection_name: str, record_id: U
         exists = point is not None
         logging.info("Record ID '%s' existence in collection '%s': %s", record_id, collection_name, exists)
         return exists
-    except Exception as e:
-        logging.warning("Error checking record existence in Qdrant: %s", e)
+    except (qdrant_exceptions.UnexpectedResponse,
+            qdrant_exceptions.ResponseHandlingException,
+            TypeError, ValueError):
+        logging.exception("Error checking record existence in Qdrant: %s")
         return False
 
 
@@ -199,7 +216,7 @@ def get_all_pdf_ids_in_qdrant(client: QdrantClient, collection_name: str) -> Lis
         records = all_records[0]
 
         unique_pdf_ids = set()
-        for record in records:
+        for idx, record in enumerate(records):
             payload = record.payload
 
             if not isinstance(payload, dict):
@@ -219,8 +236,10 @@ def get_all_pdf_ids_in_qdrant(client: QdrantClient, collection_name: str) -> Lis
         logging.info("Retrieving all %s pdf_ids from Qdrant collection.", len(unique_pdf_ids))
         return list(unique_pdf_ids)
 
-    except Exception as e:
-        logging.error("Error retrieving pdf_ids from Qdrant: %s", e)
+    except (qdrant_exceptions.UnexpectedResponse,
+                qdrant_exceptions.ResponseHandlingException,
+                TypeError, ValueError):
+        logging.exception("Error retrieving pdf_ids from Qdrant: %s")
         return []
 
 
@@ -312,13 +331,12 @@ def get_summaries_by_pdf_id(client: QdrantClient, collection_name: str, pdf_ids:
     return pd.DataFrame(summary.values())
 
 
-    
 
 def delete_records_by_pdf_id(
     client: QdrantClient,
     pdf_ids: Union[List[str], pd.Series],
     collection_name: str,
-    log_event_fn=None  # Optional hook for logging externally (e.g. log_event)
+    log_event_fn=None
 ) -> None:
     """
     Deletes all Qdrant vectors whose metadata.pdf_id matches any in the given list.
@@ -356,5 +374,9 @@ def delete_records_by_pdf_id(
             logging.info("✅ Deleted points for pdf_id %s. Operation ID: %s", pdf_id, result.operation_id)
             if log_event_fn:
                 log_event_fn("orphan_qdrant_record_deleted", pdf_id, f"Deleted from {collection_name}")
-        except Exception as e:
-            logging.error("❌ Failed to delete records for pdf_id %s: %s", pdf_id, e)
+
+        except (qdrant_exceptions.UnexpectedResponse,
+                qdrant_exceptions.ResponseHandlingException,
+                TypeError, ValueError):
+            logging.exception("❌ Failed to delete records for pdf_id %s", pdf_id)
+

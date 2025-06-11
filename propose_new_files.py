@@ -14,7 +14,7 @@ Triggered when user uploads new files  using the streamlit utility
 from datetime import datetime, timezone
 import logging
 import pandas as pd
-from typing import IO, List
+from typing import List, Protocol, runtime_checkable
 from gspread.client import Client as SheetsClient
 from googleapiclient.discovery import Resource as DriveClient
 from library_utils import compute_pdf_id, find_duplicates_against_reference, validate_core_metadata_format, append_new_rows
@@ -25,15 +25,41 @@ from env_config import env_config
 
 config = env_config()
 
-def propose_new_files(drive_client: DriveClient, sheets_client: SheetsClient, uploaded_files: List[IO[bytes]]):
+@runtime_checkable
+class FileLike(Protocol):
     """
-    Processes and uploads Streamlit-uploaded PDF files, checking for duplicates and appending metadata.
+    A protocol representing a file-like object with a binary read method and a name attribute.
+
+    Any object implementing this interface must have:
+    - a `read()` method that returns bytes
+    - a `name` attribute (typically a filename as a string)
+
+    This is designed to support flexible file input handling, including:
+    - Streamlit's UploadedFile
+    - io.BytesIO objects with a `.name` attribute
+    - tempfile.NamedTemporaryFile
+    - Other custom classes simulating file upload behavior
+    """
+    def read(self) -> bytes: ...
+    name: str
+    
+    
+def propose_new_files(drive_client: DriveClient, sheets_client: SheetsClient, uploaded_files: List[FileLike]):
+    """
+    Processes uploaded PDF files, checking for duplicates and appending metadata to the system.
 
     Args:
-        uploaded_files (List[UploadedFile]): List of uploaded PDF files. Uploaded_files must be objects with .name and .read() methods. Most file-like objects, including io.BytesIO, tempfile, and UploadedFile, and Streamlit's UploadedFile satisfy this.
+        drive_client (DriveClient): Authenticated Google Drive client.
+        sheets_client (SheetsClient): Authenticated Google Sheets client.
+        uploaded_files (List[FileLike]): List of file-like objects representing PDF uploads.
+            Each object must have a `.read()` method that returns bytes and a `.name` attribute.
+            Compatible with Streamlit's UploadedFile, io.BytesIO (with `name`), tempfile.NamedTemporaryFile, etc.
 
     Returns:
-        tuple: (new_rows_df, failed_files, duplicate_files)
+        tuple: A tuple of three elements:
+            - new_rows_df (DataFrame): Metadata rows for newly proposed PDFs.
+            - failed_files (List[FileLike]): Files that failed validation or upload.
+            - duplicate_files (List[FileLike]): Files already present in the system.
     """
 
     try:
