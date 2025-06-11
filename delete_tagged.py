@@ -39,24 +39,24 @@ def delete_tagged(drive_client: DriveClient, sheets_client: SheetsClient, qdrant
             drive_client.files().delete(fileId=file_id).execute()
             log_event(sheets_client, f"file_deleted from {folder_name}", pdf_id, filename, extra_columns=[original_status])
         except Exception as e:
-            logging.warning(f"Failed to delete file {filename} (ID: {file_id}): {e}")
+            logging.warning("Failed to delete file %s (ID: %s): %s", filename, file_id, e)
             folder_name = "unknown_folder"
 
         # --- DELETE QDRANT RECORD ---
         if original_status.startswith("new_for_deletion"):
-            logging.info(f"Skipping Qdrant deletion for new record: {pdf_id}")
+            logging.info("Skipping Qdrant deletion for new record: %s", pdf_id)
         else:
             try:
                 delete_records_by_pdf_id(qdrant_client, rag_config("qdrant_collection_name"), pdf_id)
             except Exception as e:
-                logging.warning(f"Failed to delete Qdrant record for {pdf_id}: {e}")
+                logging.warning("Failed to delete Qdrant record for %s: %s", pdf_id, e)
 
         # --- DELETE ROW FROM SHEET ---
         try:
             remove_rows(sheets_client, config["LIBRARY_UNIFIED"], row_indices=row_index)
             log_event(sheets_client, "deleted", pdf_id, filename, extra_columns=[original_status, folder_name])
         except Exception as e:
-            logging.error(f"Failed to remove row for {pdf_id}: {e}")
+            logging.error("Failed to remove row for %s: %s", pdf_id, e)
 
         deleted_rows.append(row)
 

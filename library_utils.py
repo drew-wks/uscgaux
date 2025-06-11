@@ -27,7 +27,7 @@ def compute_pdf_id(pdf_bytes_io):
         pdf_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, full_text))
         return pdf_uuid
     except Exception as e:
-        logging.warning(f"Error computing PDF ID: {e}")
+        logging.warning("Error computing PDF ID: %s", e)
         return None
 
 
@@ -148,8 +148,8 @@ def validate_all_rows_format(df):
     invalid_df = pd.DataFrame(invalid_rows)
     log_df = pd.DataFrame(log_entries)
 
-    logging.info(f"✅ Found {len(valid_df)} valid rows in LIBRARY_UNIFIED.")
-    logging.info(f"⚠️ Found {len(invalid_df)} invalid rows in LIBRARY_UNIFIED.")
+    logging.info("✅ Found %s valid rows in LIBRARY_UNIFIED.", len(valid_df))
+    logging.info("⚠️ Found %s invalid rows in LIBRARY_UNIFIED.", len(invalid_df))
 
     if not invalid_df.empty and "issues" in invalid_df.columns:
         cols = ["issues"] + [col for col in invalid_df.columns if col != "issues"]
@@ -228,7 +228,7 @@ def find_duplicates_against_reference(
                 if not value or str(value).strip() == "":
                     continue
                 if field not in reference_df.columns:
-                    logging.warning(f"Field '{field}' not found in reference_df. Skipping.")
+                    logging.warning("Field '%s' not found in reference_df. Skipping.", field)
                     continue
                 filtered_ref = filtered_ref[filtered_ref[field].astype(str) == str(value).strip()]
             if not filtered_ref.empty:
@@ -236,7 +236,7 @@ def find_duplicates_against_reference(
 
         if matches:
             result = pd.concat(matches).drop_duplicates()
-            logging.warning(f"⚠️ {len(result)} duplicates found based on provided field(s).")
+            logging.warning("⚠️ %s duplicates found based on provided field(s).", len(result))
             return result
         logging.info("✅ No duplicates found based on provided field(s).")
         return pd.DataFrame()
@@ -245,7 +245,7 @@ def find_duplicates_against_reference(
     common_columns = list(set(df_to_check.columns) & set(reference_df.columns))
     merged = df_to_check.merge(reference_df, how="inner", on=common_columns)
     if not merged.empty:
-        logging.warning(f"⚠️ {len(merged)} duplicate row(s) found in reference.")
+        logging.warning("⚠️ %s duplicate row(s) found in reference.", len(merged))
     else:
         logging.info("✅ No duplicate rows found in reference.")
     return merged
@@ -269,7 +269,7 @@ def get_planned_metadata_for_single_record(metadata_df, pdf_id):
             raise ValueError(f"Found duplicates for pdf_id '{pdf_id}' in metadata sheet.")
 
         pdf_metadata = pdf_metadata.iloc[0].copy()
-        logging.info(f"Successfully accessed metadata for pdf_id: {pdf_id}")
+        logging.info("Successfully accessed metadata for pdf_id: %s", pdf_id)
 
 
         # Confirm no existing upsert date
@@ -278,7 +278,7 @@ def get_planned_metadata_for_single_record(metadata_df, pdf_id):
 
         # Set the upsert date
         pdf_metadata['upsert_date'] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        logging.info(f"Set upsert_date to {pdf_metadata['upsert_date']} for pdf_id: {pdf_id}")
+        logging.info("Set upsert_date to %s for pdf_id: %s", pdf_metadata['upsert_date'], pdf_id)
 
 
         # Cast everything to string (except booleans)
@@ -290,7 +290,7 @@ def get_planned_metadata_for_single_record(metadata_df, pdf_id):
         return document_metadata
 
     except Exception as e:
-        logging.error(f"Error retrieving metadata for pdf_id {pdf_id}: {e}")
+        logging.error("Error retrieving metadata for pdf_id %s: %s", pdf_id, e)
         return None
 
 
@@ -322,7 +322,7 @@ def fetch_rows_by_status(catalog_df, keywords):
     match_mask = status_series.apply(lambda x: any(kw.lower() in x for kw in keywords))
     matched_rows = catalog_df[match_mask]
 
-    logging.info(f"Found {len(matched_rows)} rows matching keywords: {keywords}")
+    logging.info("Found %s rows matching keywords: %s", len(matched_rows), keywords)
     return matched_rows
 
 
@@ -344,10 +344,10 @@ def remove_rows(sheets_client, spreadsheet_id, row_indices, sheet_name="Sheet1")
         for row_index in sorted(row_indices, reverse=True):
             row = row_index + 2  # account for 1-indexing + header row
             sheet.delete_rows(row)
-            logging.info(f"Deleted row {row_index} (sheet row {row}) from {sheet_name}")
+            logging.info("Deleted row %s (sheet row %s) from %s", row_index, row, sheet_name)
 
     except Exception as e:
-        logging.error(f"Failed to delete rows from {sheet_name}: {e}")
+        logging.error("Failed to delete rows from %s: %s", sheet_name, e)
 
 
 
@@ -384,10 +384,10 @@ def append_new_rows(sheets_client, spreadsheet_id, new_rows_df, sheet_name = "Sh
             appended_dicts.append(row_dict)
 
         sheet.append_rows(rows_to_append, value_input_option="USER_ENTERED")
-        logging.info(f"✅ Appended {len(rows_to_append)} new row(s) to {sheet_name}")
+        logging.info("✅ Appended %s new row(s) to %s", len(rows_to_append), sheet_name)
 
         return appended_dicts
 
     except Exception as e:
-        logging.error(f"❌ Error in append_new_rows: {e}")
+        logging.error("❌ Error in append_new_rows: %s", e)
         return []

@@ -33,7 +33,7 @@ def init_vectorstore(client: QdrantClient) -> QdrantVectorStore:
         collection_name = rag_config("qdrant_collection_name")
         embedding_model = rag_config("embedding_model")
     except KeyError as e:
-        logging.error(f"Missing required RAG_CONFIG key: {e}")
+        logging.error("Missing required RAG_CONFIG key: %s", e)
         raise
 
     try:
@@ -44,11 +44,11 @@ def init_vectorstore(client: QdrantClient) -> QdrantVectorStore:
             embedding=embedding,
             validate_collection_config=True
         )
-        logging.info(f"LangChain QdrantVectorStore initialized for collection '{collection_name}'.")
+        logging.info("LangChain QdrantVectorStore initialized for collection '%s'.", collection_name)
         return vectorstore
 
     except Exception as e:
-        logging.error(f"Failed to initialize LangChain QdrantVectorStore: {e}")
+        logging.error("Failed to initialize LangChain QdrantVectorStore: %s", e)
         raise
     
     
@@ -102,10 +102,10 @@ def pdf_to_Docs_via_Drive(
             doc.metadata.update(planned_validated_metadata)
             docs_pages.append(doc)
 
-        logging.info(f"Processed file_id: {file_id} | Pages: {len(docs_pages)}")
+        logging.info("Processed file_id: %s | Pages: %s", file_id, len(docs_pages))
 
     except Exception as e:
-        logging.error(f"Failed to process PDF from Drive (file_id={file_id}): {e}")
+        logging.error("Failed to process PDF from Drive (file_id=%s): %s", file_id, e)
 
     return docs_pages
 
@@ -134,7 +134,7 @@ def chunk_documents(
         length_function=rag_config("length_function"),
         separators=rag_config("separators")
     except KeyError as e:
-        logging.error(f"Missing required RAG_CONFIG key: {e}")
+        logging.error("Missing required RAG_CONFIG key: %s", e)
         raise
    
     try:    
@@ -146,9 +146,9 @@ def chunk_documents(
         )
 
         docs_chunks = text_splitter.split_documents(docs_pages)
-        logging.info(f"Chunked {len(docs_pages)} pages into {len(docs_chunks)} chunks.")
+        logging.info("Chunked %s pages into %s chunks.", len(docs_pages), len(docs_chunks))
         return docs_chunks
 
     except Exception as e:
-        logging.error(f"Failed to chunk documents: {e}")
+        logging.error("Failed to chunk documents: %s", e)
         raise

@@ -57,16 +57,16 @@ def set_env_vars():
     ENV_FILE = "/Users/drew_wilkins/Drews_Files/Drew/Python/Localcode/.env"
     if os.path.exists(ENV_FILE):
         load_dotenv(dotenv_path=ENV_FILE)
-        logging.info(f"Loaded local .env file from {ENV_FILE}")
+        logging.info("Loaded local .env file from %s", ENV_FILE)
     else:
-        logging.info(f"No local .env file found at {ENV_FILE}, assuming Streamlit Cloud")
+        logging.info("No local .env file found at %s, assuming Streamlit Cloud", ENV_FILE)
 
     # Set context values by reading values from env or else setting defaults that assume Streamlit
     run_context = os.getenv("RUN_CONTEXT", "streamlit").lower()
     force_user_auth = os.getenv("FORCE_USER_AUTH", "true").lower() == "true"
 
-    logging.info(f"Running in context: {run_context.upper()}")
-    logging.info(f"Force user authentication: {force_user_auth}")
+    logging.info("Running in context: %s", run_context.upper())
+    logging.info("Force user authentication: %s", force_user_auth)
 
 
     # If context is set to Streamlit, stores Streamlit secrets into os.environ. Yes, it will do this on every reload, but it's very quick
@@ -86,7 +86,7 @@ def set_env_vars():
                 else:
                     os.environ[key] = str(value)
         except Exception as e:
-            logging.warning(f"Failed to load Streamlit secrets: {e}")
+            logging.warning("Failed to load Streamlit secrets: %s", e)
 
     # Store the balance of values into os.environ explicitly, regardless of streamlit context
     for key, value in GCP_CONFIG.items():
@@ -118,7 +118,7 @@ def env_config():
     ENV_FILE = "/Users/drew_wilkins/Drews_Files/Drew/Python/Localcode/.env"
     if os.path.exists(ENV_FILE):
         load_dotenv(ENV_FILE)
-        logging.info(f"Found a local .env file at {ENV_FILE}")
+        logging.info("Found a local .env file at %s", ENV_FILE)
 
     # Read declared context (don't assume based on .env presence)
     run_context = os.getenv("RUN_CONTEXT", "streamlit").lower()
@@ -127,8 +127,8 @@ def env_config():
     # Start loading variables into config dict
     config["run_context"] = run_context
     config["force_user_auth"] = force_user_auth
-    logging.info(f"Running in context: {run_context.upper()}")
-    logging.info(f"Force user authentication: {force_user_auth}")
+    logging.info("Running in context: %s", run_context.upper())
+    logging.info("Force user authentication: %s", force_user_auth)
 
     config.update(GCP_CONFIG)
     config["QDRANT_PATH"] = "/Users/drew_wilkins/Drews_Files/Drew/Python/Localcode/Drews_Tools/qdrant_ASK_lib_tools/qdrant_db"
@@ -139,17 +139,17 @@ def env_config():
             import streamlit as st
             for key, value in st.secrets.items():
                 config[key.lower()] = value  # Lowercase for consistency
-            logging.info(f"Set balance of env values from Streamlit secrets")
+            logging.info("Set balance of env values from Streamlit secrets")
         except Exception as e:
             config["streamlit_error"] = str(e)
-            logging.warning(f"Failed to load Streamlit secrets: {e}")
+            logging.warning("Failed to load Streamlit secrets: %s", e)
     # Otherwise CLI/test mode — bring in all extra .env values
     else:
         if os.path.exists(ENV_FILE):
             for key, value in dotenv_values(ENV_FILE).items():
                 if key not in config:
                     config[key] = value
-            logging.info(f"Set balance of env values from.env file at {ENV_FILE}")
+            logging.info("Set balance of env values from.env file at %s", ENV_FILE)
    
     return config
 

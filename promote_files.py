@@ -22,7 +22,7 @@ def promote_files(drive_client: DriveClient, sheets_client: SheetsClient, qdrant
     valid_df, invalid_df, log_df = validate_all_rows_format(library_df)
 
     if not invalid_df.empty:
-        logging.error(f"LIBRARY_UNIFIED validation failed: {len(invalid_df)} invalid row(s) found. Promotion halted.")
+        logging.error("LIBRARY_UNIFIED validation failed: %s invalid row(s) found. Promotion halted.", len(invalid_df))
         return
     
 
@@ -35,7 +35,7 @@ def promote_files(drive_client: DriveClient, sheets_client: SheetsClient, qdrant
     fields_to_check=[{"pdf_id": pdf_id} for pdf_id in to_promote_df["pdf_id"].dropna().unique()]
 )
     if not duplicate_rows.empty:
-        logging.error(f"{len(duplicate_rows)} duplicate validated pdf_id(s) found. Promotion halted.")
+        logging.error("%s duplicate validated pdf_id(s) found. Promotion halted.", len(duplicate_rows))
         return
 
     to_promote_df = to_promote_df.reset_index(drop=True)
@@ -51,14 +51,14 @@ def promote_files(drive_client: DriveClient, sheets_client: SheetsClient, qdrant
 
         # Confirm pdf_id is not already in Qdrant
         if in_qdrant(qdrant_client, rag_config("qdrant_collection_name"), pdf_id):
-            logging.warning(f"{pdf_id} already exists in Qdrant. Skipping promotion.")
+            logging.warning("%s already exists in Qdrant. Skipping promotion.", pdf_id)
             continue
 
         # Fetch PDF, extract Docs, inject metadata, chunk, and send to Qdrant
         # TODO THIS IS A A PLACEHOLDER
         docs = pdf_to_Docs_via_Drive(drive_client, pdf_id, planned_validated_metadata)
         if not docs:
-            logging.warning(f"Failed to extract docs for {filename}: {pdf_id}. Skipping.")
+            logging.warning("Failed to extract docs for %s: %s. Skipping.", filename, pdf_id)
             continue
 
         qdrant_client.upload_collection_batch(collection_name=rag_config("qdrant_collection_name"), documents=docs)

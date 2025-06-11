@@ -55,9 +55,9 @@ def flag_rows_as_orphans(sheet, df: pd.DataFrame, orphan_rows: pd.DataFrame) -> 
     if updates:
         try:
             sheet.batch_update(updates, value_input_option="RAW")
-            logging.info(f"✅ Updated {len(updates)} orphan rows in LIBRARY_UNIFIED.")
+            logging.info("✅ Updated %s orphan rows in LIBRARY_UNIFIED.", len(updates))
         except Exception as e:
-            logging.error(f"❌ Failed batch row update in LIBRARY_UNIFIED: {e}")
+            logging.error("❌ Failed batch row update in LIBRARY_UNIFIED: %s", e)
 
     return log_entries
 
@@ -108,7 +108,7 @@ def find_files_missing_rows(library_df: pd.DataFrame, all_files_df: pd.DataFrame
     """
     google_ids_in_library_df = set(library_df["google_id"].astype(str).unique())
     orphan_files = all_files_df[~all_files_df["ID"].astype(str).isin(google_ids_in_library_df)]
-    logging.info(f"⚠️ Found {len(orphan_files)} orphans (files in Google Drive folders but not in LIBRARY_UNIFIED).")
+    logging.info("⚠️ Found %s orphans (files in Google Drive folders but not in LIBRARY_UNIFIED).", len(orphan_files))
 
     log_entries = []
     for _, row in orphan_files.iterrows():
@@ -145,7 +145,7 @@ def find_records_missing_liverows(qdrant_client: QdrantClient, library_df: pd.Da
     log_entries = []
 
     if orphan_qdrant_ids:
-        logging.warning(f"Found {len(orphan_qdrant_ids)} orphans (records in Qdrant but not in LIBRARY_UNIFIED):\n {orphan_qdrant_ids}")
+        logging.warning("Found %s orphans (records in Qdrant but not in LIBRARY_UNIFIED):\n %s", len(orphan_qdrant_ids), orphan_qdrant_ids)
         log_entries = [{
             "action": "orphan_record_detected_in_qdrant",
             "pdf_id": pdf_id
@@ -187,7 +187,7 @@ def find_orphans(drive_client: DriveClient, sheets_client: SheetsClient, qdrant_
     drive_files_list = []
     for folder_name in ["PDF_TAGGING", "PDF_LIVE"]:
         folder_id = config[folder_name]
-        logging.info(f"Cataloging {folder_name} for orphan review")
+        logging.info("Cataloging %s for orphan review", folder_name)
         files_info_df = list_pdfs_in_folder(drive_client, folder_id)
         files_info_df["folder"] = folder_name
         drive_files_list.append(files_info_df)
@@ -202,6 +202,6 @@ def find_orphans(drive_client: DriveClient, sheets_client: SheetsClient, qdrant_
     all_log_entries = row_log_entries + file_log_entries + qdrant_log_entries
     log_df = pd.DataFrame(all_log_entries)
 
-    logging.info(f"Returning {len(log_df)} total log entries.")
+    logging.info("Returning %s total log entries.", len(log_df))
     return orphan_rows_missing_tagginglivefiles, orphan_tagginglivefiles_missing_rows, orphan_records_missing_liverows, log_df
 

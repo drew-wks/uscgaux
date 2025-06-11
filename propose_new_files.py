@@ -40,7 +40,7 @@ def propose_new_files(drive_client: DriveClient, sheets_client: SheetsClient, up
         library_unified_df = fetch_sheet_as_df(sheets_client, config["LIBRARY_UNIFIED"])
         library_unified_df['pdf_id'] = library_unified_df['pdf_id'].astype(str)
     except Exception as e:
-        logging.error(f"❌ Failed to fetch or process LIBRARY_UNIFIED sheet: {e}")
+        logging.error("❌ Failed to fetch or process LIBRARY_UNIFIED sheet: %s", e)
         return pd.DataFrame(), [file.name for file in uploaded_files], []
 
     failed_files = []
@@ -57,7 +57,7 @@ def propose_new_files(drive_client: DriveClient, sheets_client: SheetsClient, up
                 raise ValueError("Could not compute pdf_id")
             file_map[file_name] = (pdf_id, uploaded_file)
         except Exception as e:
-            logging.warning(f"⚠️ {e} for file: {file_name}")
+            logging.warning("⚠️ %s for file: %s", e, file_name)
             failed_files.append(file_name)
 
     # Step 2: Batch check for duplicates
@@ -70,7 +70,7 @@ def propose_new_files(drive_client: DriveClient, sheets_client: SheetsClient, up
         )
         duplicate_pdf_ids = set(duplicate_rows["pdf_id"]) if not duplicate_rows.empty else set()
     except Exception as e:
-        logging.error(f"❌ Failed during duplicate check: {e}")
+        logging.error("❌ Failed during duplicate check: %s", e)
         return pd.DataFrame(), [file.name for file in uploaded_files], []
 
     # Step 3: Log duplicates
@@ -81,7 +81,7 @@ def propose_new_files(drive_client: DriveClient, sheets_client: SheetsClient, up
             try:
                 log_event(sheets_client, "duplicate_skipped", pdf_id, file_name, extra_columns=[reason])
             except Exception as log_error:
-                logging.error(f"⚠️ Failed to log duplicate_skipped event: {log_error}")
+                logging.error("⚠️ Failed to log duplicate_skipped event: %s", log_error)
             duplicate_files.append(file_name)
 
     # Step 4: Upload and collect new rows
@@ -106,7 +106,7 @@ def propose_new_files(drive_client: DriveClient, sheets_client: SheetsClient, up
             log_event(sheets_client, "new_pdf_to_PDF_TAGGING", pdf_id, file_name)
 
         except Exception as e:
-            logging.error(f"❌ Failed to process {file_name}: {e}")
+            logging.error("❌ Failed to process %s: %s", file_name, e)
             failed_files.append(file_name)
 
     # Step 5: Write to sheet
@@ -115,7 +115,7 @@ def propose_new_files(drive_client: DriveClient, sheets_client: SheetsClient, up
         try:
             append_new_rows(sheets_client, config["LIBRARY_UNIFIED"], new_rows_df)
         except Exception as e:
-            logging.error(f"❌ Failed to append rows to LIBRARY_UNIFIED: {e}")
+            logging.error("❌ Failed to append rows to LIBRARY_UNIFIED: %s", e)
             failed_files.extend(new_rows_df["pdf_file_name"].tolist())
             new_rows_df = pd.DataFrame()
 
@@ -123,10 +123,10 @@ def propose_new_files(drive_client: DriveClient, sheets_client: SheetsClient, up
     try:
         missing_columns = validate_core_metadata_format(new_rows_df)
         if missing_columns:
-            logging.warning(f"⚠️ New rows are missing required metadata columns: {missing_columns}. Please fix the sheet structure before continuing.")
+            logging.warning("⚠️ New rows are missing required metadata columns: %s. Please fix the sheet structure before continuing.", missing_columns)
         else:
             logging.info("✅ Metadata validation passed.")
     except Exception as e:
-        logging.error(f"❌ Failed during metadata validation: {e}")
+        logging.error("❌ Failed during metadata validation: %s", e)
 
     return new_rows_df, failed_files, duplicate_files
