@@ -11,21 +11,19 @@ Triggered when user uploads new files  using the streamlit utility
 """
 
 
-import os
 from datetime import datetime, timezone
 import logging
 import pandas as pd
 from typing import IO, List
-from streamlit.runtime.uploaded_file_manager import UploadedFile
 from gspread.client import Client as SheetsClient
 from googleapiclient.discovery import Resource as DriveClient
-from library_utils import compute_pdf_id, find_duplicates_against_reference, validate_core_metadata_format
+from library_utils import compute_pdf_id, find_duplicates_against_reference, validate_core_metadata_format, append_new_rows
 from gcp_utils import upload_pdf, fetch_sheet_as_df
 from log_writer import log_event
 
+from env_config import env_config
 
-set_env_vars()
-
+config = env_config()
 
 def propose_new_files(drive_client: DriveClient, sheets_client: SheetsClient, uploaded_files: List[IO[bytes]]):
     """
@@ -39,7 +37,7 @@ def propose_new_files(drive_client: DriveClient, sheets_client: SheetsClient, up
     """
 
     try:
-        library_unified_df = fetch_sheet_as_df(sheets_client, os.environ["LIBRARY_UNIFIED"])
+        library_unified_df = fetch_sheet_as_df(sheets_client, config["LIBRARY_UNIFIED"])
         library_unified_df['pdf_id'] = library_unified_df['pdf_id'].astype(str)
     except Exception as e:
         logging.error(f"❌ Failed to fetch or process LIBRARY_UNIFIED sheet: {e}")
@@ -93,7 +91,7 @@ def propose_new_files(drive_client: DriveClient, sheets_client: SheetsClient, up
 
         try:
             uploaded_file.seek(0)
-            file_id = upload_pdf(drive_client, uploaded_file, file_name, os.environ["PDF_TAGGING"])
+            file_id = upload_pdf(drive_client, uploaded_file, file_name, config["PDF_TAGGING"])
             file_link = f"https://drive.google.com/file/d/{file_id}/view"
 
             collected_rows.append({
@@ -115,7 +113,7 @@ def propose_new_files(drive_client: DriveClient, sheets_client: SheetsClient, up
     new_rows_df = pd.DataFrame(collected_rows)
     if not new_rows_df.empty:
         try:
-            safe_append_rows_to_sheet(sheets_client, os.environ["LIBRARY_UNIFIED"], new_rows_df)
+            append_new_rows(sheets_client, config["LIBRARY_UNIFIED"], new_rows_df)
         except Exception as e:
             logging.error(f"❌ Failed to append rows to LIBRARY_UNIFIED: {e}")
             failed_files.extend(new_rows_df["pdf_file_name"].tolist())
@@ -123,8 +121,11 @@ def propose_new_files(drive_client: DriveClient, sheets_client: SheetsClient, up
 
     # Step 6: Check metadata formatting
     try:
-        if not validate_core_metadata_format(new_rows_df):
-            logging.warning("⚠️ One or more rows have incomplete metadata in new_rows_df.")
+        missing_columns = validate_core_metadata_format(new_rows_df)
+        if missing_columns:
+            logging.warning(f"⚠️ New rows are missing required metadata columns: {missing_columns}. Please fix the sheet structure before continuing.")
+        else:
+            logging.info("✅ Metadata validation passed.")
     except Exception as e:
         logging.error(f"❌ Failed during metadata validation: {e}")
 

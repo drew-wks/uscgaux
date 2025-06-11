@@ -1,4 +1,3 @@
-import os
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -6,7 +5,6 @@ from typing import Optional, Dict, List, Union
 import pandas as pd
 from pypdf import PdfReader
 from gcp_utils import fetch_sheet_as_df  
-
 
 
 def compute_pdf_id(pdf_bytes_io):
@@ -44,19 +42,10 @@ def validate_core_metadata_format(df):
         ValueError: If any required columns are missing.
     """
     required_columns = {"pdf_id", "pdf_file_name", "google_id", "link"}
-
     existing_columns = set(df.columns.str.strip().str.lower())
-
     missing_columns = required_columns - existing_columns
 
-    if missing_columns:
-        raise ValueError(
-            f"The catalog is missing required core metadata columns: {missing_columns}. Please fix the sheet structure before continuing."
-        )
-
-
-    logging.info("Catalog structure validated successfully.")
-
+    return missing_columns
 
 
 def validate_all_rows_format(df):

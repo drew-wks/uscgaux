@@ -17,7 +17,7 @@ import pandas as pd
 from gspread.client import Client as SheetsClient
 from googleapiclient.discovery import Resource as DriveClient
 from qdrant_client import QdrantClient
-from env_config import get_config
+from env_config import rag_config
 from gcp_utils import get_folder_name, move_pdf, fetch_sheet_as_df
 from qdrant_utils import delete_records_by_pdf_id
 from library_utils import fetch_rows_by_status, remove_rows, append_new_rows
@@ -36,7 +36,7 @@ def archive_tagged(
     """
     TARGET_STATUSES = ["live_for_archive"]
 
-    library_df = fetch_sheet_as_df(sheets_client, os.environ["LIBRARY_UNIFIED"])
+    library_df = fetch_sheet_as_df(sheets_client, config["LIBRARY_UNIFIED"])
     
     # --- Find ROWS marked for archiving ---
     rows_to_archive = fetch_rows_by_status(library_df, TARGET_STATUSES)
@@ -53,16 +53,16 @@ def archive_tagged(
         row_index = library_df[library_df["pdf_id"] == pdf_id].index.tolist()
 
         # --- MOVE FILE ---
-        move_pdf(drive_client, file_id, os.environ["PDF_ARCHIVE"])
+        move_pdf(drive_client, file_id, config["PDF_ARCHIVE"])
 
          # --- DELETE RECORD ---
-        delete_records_by_pdf_id(qdrant_client, get_config("qdrant_collection_name"), pdf_id)
+        delete_records_by_pdf_id(qdrant_client, rag_config("qdrant_collection_name"), pdf_id)
 
         # --- MOVE ROW ---
         row["timestamp_archived"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         append_new_rows(
             sheets_client,
-            spreadsheet_id=os.environ["LIBRARY_ARCHIVE"],
+            spreadsheet_id=config["LIBRARY_ARCHIVE"],
             new_rows_df=pd.DataFrame([row]),
             sheet_name="Sheet1"
         )
@@ -70,7 +70,7 @@ def archive_tagged(
         try:
             remove_rows(
                 sheets_client,
-                spreadsheet_id=os.environ["LIBRARY_UNIFIED"],
+                spreadsheet_id=config["LIBRARY_UNIFIED"],
                 row_indices=row_index
             )
         except Exception as e:

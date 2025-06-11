@@ -1,5 +1,5 @@
 import os, logging, json
-from dotenv import load_dotenv
+from dotenv import load_dotenv, dotenv_values
 
 
 logging.basicConfig(
@@ -35,31 +35,25 @@ This module reads environment switches that help your app distinguish between ru
 
 1. RUN_CONTEXT
     Set this to:
-    - "streamlit" → for Streamlit UI (uses st.secrets and decorators)
-    - "cli"       → for local/testing (uses .env and skips Streamlit features)
+    - "streamlit" → uses st.secrets and decorators (DEFAULT)
+    - "cli"       → uses .env and skips Streamlit features
 
-    Example:
-        RUN_CONTEXT=streamlit
 
 2. FORCE_USER_AUTH
-    Controls whether authentication is required.
-    Useful for bypassing login in local dev or test flows.
-
-    Example:
-        FORCE_USER_AUTH=false
-
---- Behavior ---
-- If RUN_CONTEXT is not defined, defaults to "streamlit"
-- If FORCE_USER_AUTH is not defined, defaults to True when in Streamlit
+    - true → Requires login. Defaults to True when in streamlit
+    - false → Bypasses login for local dev or test flows.
 """
-
 
 
 def set_env_vars():
     """
-    Loads environment variables and secrets.
+    THIS IS THE LEGACY FUNCTION
+    Loads environment variables and/or secrets into environmental variables for runtime.
+    THis app does not rely on passing variables as secrets at runtime
     Always attempts to load the .env file first to capture overrides like RUN_CONTEXT.
     """
+    
+    # Get env file if it exists
     ENV_FILE = "/Users/drew_wilkins/Drews_Files/Drew/Python/Localcode/.env"
     if os.path.exists(ENV_FILE):
         load_dotenv(dotenv_path=ENV_FILE)
@@ -67,23 +61,22 @@ def set_env_vars():
     else:
         logging.info(f"No local .env file found at {ENV_FILE}, assuming Streamlit Cloud")
 
-    # Now read context values from env
+    # Set context values by reading values from env or else setting defaults that assume Streamlit
     run_context = os.getenv("RUN_CONTEXT", "streamlit").lower()
     force_user_auth = os.getenv("FORCE_USER_AUTH", "true").lower() == "true"
 
     logging.info(f"Running in context: {run_context.upper()}")
-    logging.info(f"Force authentication: {force_user_auth}")
+    logging.info(f"Force user authentication: {force_user_auth}")
 
-    # Store resolved values into os.environ explicitly
-    os.environ["RUN_CONTEXT"] = run_context
-    os.environ["FORCE_USER_AUTH"] = str(force_user_auth).lower()
-    os.environ["QDRANT_PATH"] = "/Users/drew_wilkins/Drews_Files/Drew/Python/Localcode/Drews_Tools/qdrant_ASK_lib_tools/qdrant_db"
 
-    for key, value in GCP_CONFIG.items():
-        os.environ[key] = value
-
-    # Only load Streamlit secrets if explicitly running in Streamlit
+    # If context is set to Streamlit, stores Streamlit secrets into os.environ. Yes, it will do this on every reload, but it's very quick
     if run_context == "streamlit":
+        # First remove eixsting keys from os.environ that came from .env, if present
+        # We will re establish the context values again below
+        env_keys = dotenv_values(ENV_FILE).keys()
+        for key in env_keys:
+            os.environ.pop(key, None)
+        # Store Streamlit secrets into os.environ
         try:
             import streamlit as st
             for key, value in st.secrets.items():
@@ -94,6 +87,73 @@ def set_env_vars():
                     os.environ[key] = str(value)
         except Exception as e:
             logging.warning(f"Failed to load Streamlit secrets: {e}")
+
+    # Store the balance of values into os.environ explicitly, regardless of streamlit context
+    for key, value in GCP_CONFIG.items():
+        os.environ[key] = value
+    os.environ["RUN_CONTEXT"] = run_context
+    os.environ["FORCE_USER_AUTH"] = str(force_user_auth).lower()
+    os.environ["QDRANT_PATH"] = "/Users/drew_wilkins/Drews_Files/Drew/Python/Localcode/Drews_Tools/qdrant_ASK_lib_tools/qdrant_db"
+
+
+
+def env_config():
+    """
+    THIS IS THE NEW FUNCTION
+    Respects RUN_CONTEXT and FORCE_USER_AUTH from .env.
+    Loads app config from .env and/or Streamlit secrets.
+    Returns a normalized config dictionary.
+    
+    Usage:  Import and call it in your main code...
+    from env_config import env_config
+    config = env_config()
+    
+    access varialbes like this:
+    library_id = config["LIBRARY_UNIFIED"]
+    """
+
+    config = {}
+
+    # Load .env if present
+    ENV_FILE = "/Users/drew_wilkins/Drews_Files/Drew/Python/Localcode/.env"
+    if os.path.exists(ENV_FILE):
+        load_dotenv(ENV_FILE)
+        logging.info(f"Found a local .env file at {ENV_FILE}")
+
+    # Read declared context (don't assume based on .env presence)
+    run_context = os.getenv("RUN_CONTEXT", "streamlit").lower()
+    force_user_auth = os.getenv("FORCE_USER_AUTH", "true").lower() == "true"
+
+    # Start loading variables into config dict
+    config["run_context"] = run_context
+    config["force_user_auth"] = force_user_auth
+    logging.info(f"Running in context: {run_context.upper()}")
+    logging.info(f"Force user authentication: {force_user_auth}")
+
+    config.update(GCP_CONFIG)
+    config["QDRANT_PATH"] = "/Users/drew_wilkins/Drews_Files/Drew/Python/Localcode/Drews_Tools/qdrant_ASK_lib_tools/qdrant_db"
+
+    # Optionally load Streamlit secrets if run_context is set to that
+    if run_context == "streamlit":
+        try:
+            import streamlit as st
+            for key, value in st.secrets.items():
+                config[key.lower()] = value  # Lowercase for consistency
+            logging.info(f"Set balance of env values from Streamlit secrets")
+        except Exception as e:
+            config["streamlit_error"] = str(e)
+            logging.warning(f"Failed to load Streamlit secrets: {e}")
+    # Otherwise CLI/test mode — bring in all extra .env values
+    else:
+        if os.path.exists(ENV_FILE):
+            for key, value in dotenv_values(ENV_FILE).items():
+                if key not in config:
+                    config[key] = value
+            logging.info(f"Set balance of env values from.env file at {ENV_FILE}")
+   
+    return config
+
+
 
 
 RAG_CONFIG = {
@@ -119,7 +179,7 @@ RAG_CONFIG = {
 }
 
 
-def get_config(key: str):
+def rag_config(key: str):
     """
     Retrieve a required configuration value from RAG_CONFIG.
 

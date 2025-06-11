@@ -5,12 +5,13 @@ Module: log_writer.py
 Provides a reusable logging function for all agents to append entries to EVENT_LOG.
 """
 
-import os, logging
+import logging
 from datetime import datetime, timezone
 from typing import Optional, Dict, List, Any
 from gspread.client import Client as SheetsClient
-from env_config import set_env_vars
-set_env_vars() 
+from env_config import env_config
+
+config = env_config()
 
 logging.basicConfig(level=logging.INFO)
 
@@ -68,7 +69,7 @@ def log_events(
     logged_events = []
 
     try:
-        spreadsheet_id = event_log_id or os.environ["EVENT_LOG"]
+        spreadsheet_id = event_log_id or config["EVENT_LOG"]
         ws = sheets_client.open_by_key(spreadsheet_id).worksheet("Sheet1")
         headers = ws.row_values(1)
 
@@ -114,7 +115,7 @@ def log_events(
 
 
 def print_log_link():
-    log_sheet_id = os.environ.get("EVENT_LOG", "missing_env_var")
+    log_sheet_id = config["EVENT_LOG"]
     log_url = f"https://docs.google.com/spreadsheets/d/{log_sheet_id}"
     logging.info(f"📄 Admin event log written to: {log_url}")
 

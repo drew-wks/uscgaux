@@ -1,6 +1,5 @@
 #  Utilities for Google Drive file management
 
-import os
 import logging
 import json
 from io import BytesIO
@@ -13,13 +12,16 @@ from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build, Resource as DriveClient
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
+from env_config import env_config
+
+config = env_config()
 
 
 def get_gcp_credentials() -> Credentials:
     """
     Returns a Google `Credentials` object from a flattened JSON string in the environment.
     """
-    creds_json = os.getenv("GCP_CREDENTIALS_FOR_STREAMLIT_USCGAUX_APP")
+    creds_json = config["GCP_CREDENTIALS_FOR_STREAMLIT_USCGAUX_APP"]
     if not creds_json:
         raise EnvironmentError("Missing GCP_CREDENTIALS_FOR_STREAMLIT_USCGAUX_APP in environment.")
 

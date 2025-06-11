@@ -3,18 +3,21 @@ import logging
 from gspread.client import Client as SheetsClient
 from googleapiclient.discovery import Resource as DriveClient
 from qdrant_client import QdrantClient
-from env_config import get_config
+from env_config import rag_config
 from library_utils import fetch_rows_by_status, remove_rows
 from gcp_utils import get_folder_name, fetch_sheet_as_df
 from qdrant_utils import delete_records_by_pdf_id
 from log_writer import log_event
+from env_config import env_config
+
+config = env_config()
 
 
 
 def delete_tagged(drive_client: DriveClient, sheets_client: SheetsClient, qdrant_client: QdrantClient):
     TARGET_STATUSES = ["deletion"]
 
-    library_df = fetch_sheet_as_df(sheets_client, os.environ["LIBRARY_UNIFIED"])
+    library_df = fetch_sheet_as_df(sheets_client, config["LIBRARY_UNIFIED"])
     rows_to_delete = fetch_rows_by_status(library_df, TARGET_STATUSES)
 
     if rows_to_delete.empty:
@@ -44,13 +47,13 @@ def delete_tagged(drive_client: DriveClient, sheets_client: SheetsClient, qdrant
             logging.info(f"Skipping Qdrant deletion for new record: {pdf_id}")
         else:
             try:
-                delete_records_by_pdf_id(qdrant_client, get_config("qdrant_collection_name"), pdf_id)
+                delete_records_by_pdf_id(qdrant_client, rag_config("qdrant_collection_name"), pdf_id)
             except Exception as e:
                 logging.warning(f"Failed to delete Qdrant record for {pdf_id}: {e}")
 
         # --- DELETE ROW FROM SHEET ---
         try:
-            remove_rows(sheets_client, os.environ["LIBRARY_UNIFIED"], row_indices=row_index)
+            remove_rows(sheets_client, config["LIBRARY_UNIFIED"], row_indices=row_index)
             log_event(sheets_client, "deleted", pdf_id, filename, extra_columns=[original_status, folder_name])
         except Exception as e:
             logging.error(f"Failed to remove row for {pdf_id}: {e}")

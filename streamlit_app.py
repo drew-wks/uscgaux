@@ -3,71 +3,30 @@ import base64
 import streamlit as st
 st.set_page_config(page_title="ASK Auxiliary Source of Knowledge",
                    initial_sidebar_state="collapsed")
-from env_config import set_env_vars
-set_env_vars()
-from library_utils import validate_all_rows_format
-from gcp_utils import init_sheets_client, init_drive_client, fetch_sheet_as_df
+from env_config import env_config
+from typing import Tuple
+from gcp_utils import get_gcp_credentials, init_sheets_client, init_drive_client
 from qdrant_utils import init_qdrant_client
+from gcp_utils import fetch_sheet_as_df
+from library_utils import validate_all_rows_format
 from propose_new_files import propose_new_files
 from cleanup_orphans import find_orphans
 from promote_files import promote_files
 from delete_tagged import delete_tagged
-import ui_utils
+from ui_utils import init_auth, apply_styles, init_cached_clients, get_library_catalog_excel_and_date
 
+config = env_config()
+init_auth()
+apply_styles()
 
-ui_utils.init_auth()
-
-
-@st.cache_resource
-def get_cached_drive_client():
-    creds_info = st.secrets.get("gcp_service_account")
-    if not creds_info:
-        st.error("Missing `[gcp_service_account]` in your secrets.")
-        st.stop()
-    return init_drive_client(creds_info)
-
-
-@st.cache_resource
-def get_cached_sheets_client():
-    creds_info = st.secrets.get("gcp_service_account")
-    if not creds_info:
-        st.error("Missing `[gcp_service_account]` in your secrets.")
-        st.stop()
-    return init_sheets_client(creds_info)
-
-
-@st.cache_resource
-def get_cached_qdrant_client():
-    location = st.secrets.get("qdrant_location")
-    if not location:
-        st.error("Missing `qdrant_location` in your secrets.")
-        st.stop()
-    return init_qdrant_client(location)
-
-
-try:
-    drive_client = get_cached_drive_client()
-except Exception as e:
-    st.error(f"❌ Could not connect to Google Drive: {e}")
-    st.stop()
-
-try:
-    sheets_client = get_cached_sheets_client()
-except Exception as e:
-    st.error(f"❌ Could not connect to Google Sheets: {e}")
-    st.stop()
-
-try:
-    qdrant_client = get_cached_qdrant_client()
-except Exception as e:
-    st.error(f"❌ Could not connect to Qdrant: {e}")
-    st.stop()
-    
-
-ui_utils.apply_styles()
+creds = get_gcp_credentials()
+sheets_client = init_sheets_client(creds)
+drive_client = init_drive_client(creds)
+qdrant_client = init_qdrant_client("cloud")
 
 st.write("")
 st.write("")
+st.info(f"Run context: {config['RUN_CONTEXT']}")
 
 tabs = st.tabs([
     "Propose PDFs",
@@ -102,7 +61,7 @@ with tabs[1]:
     with st.container():
         st.markdown("**Step 1. Review proposed PDFs in `PDF_TAGGING`**")
         indent_col, content_col = st.columns([0.05, 0.95])
-        link = f"https://drive.google.com/drive/folders/{os.getenv('PDF_TAGGING')}"
+        link = f"https://drive.google.com/drive/folders/{config['PDF_TAGGING']}"
         with content_col:
             st.link_button("Open PDF_TAGGING", link)
 
@@ -110,7 +69,7 @@ with tabs[1]:
     with st.container():
         st.markdown("**Step 2. Fill out metadata in `LIBRARY_UNIFIED`**")
         indent_col, content_col = st.columns([0.05, 0.95])
-        link = f"https://docs.google.com/spreadsheets/d/{os.getenv('LIBRARY_UNIFIED')}"
+        link = f"https://docs.google.com/spreadsheets/d/{config['LIBRARY_UNIFIED']}"
         with content_col:
             st.link_button("Open LIBRARY_UNIFIED", link)
 
@@ -137,12 +96,16 @@ with tabs[1]:
         with content_col:
             if st.button("Validate rows format", key="validate_rows_format", type="secondary"):
                 with st.spinner("Searching rows, PDFs, and records..."):
-                    valid_df, invalid_df, log_df = validate_all_rows_format(sheets_client)
+                    library_df = fetch_sheet_as_df(sheets_client, config["LIBRARY_UNIFIED"])
+                    valid_df, invalid_df, log_df = validate_all_rows_format(library_df)
                 if invalid_df.empty:
                     st.success("✅ No invalid rows found.")
                 else:
+                    if not log_df.empty:
+                        st.write("⚠️ Invalid rows found:")
+                        st.dataframe(log_df)
                     if not invalid_df.empty:
-                        st.write("⚠️ Invalid rows found in LIBRARY_UNIFIED")
+                        st.write("⚠️ Invalid rows detail:")
                         st.dataframe(invalid_df)
 
     # Step 5
@@ -173,7 +136,7 @@ with tabs[1]:
         with content_col:
             dry_run = st.checkbox(
                 "Optional: test functionality without uploading")
-            os.environ["DRY_RUN"] = str(dry_run)
+            config["DRY_RUN"] = str(dry_run)
             if st.button("Promote PDFs", key="promote_pdfs", type="secondary"):
                 with st.spinner("Promoting PDFs..."):
                     promote_files(drive_client, sheets_client, qdrant_client)
@@ -184,7 +147,7 @@ with tabs[2]:
     st.write("")
     TARGET_STATUSES = ["live"]
     library_unified_df = fetch_sheet_as_df(
-        sheets_client, os.environ["LIBRARY_UNIFIED"])
+        sheets_client, config["LIBRARY_UNIFIED"])
     if library_unified_df is None or library_unified_df.empty:
         st.warning("⚠️ LIBRARY_UNIFIED sheet is empty or not accessible.")
         library_unified_df = None
@@ -215,7 +178,7 @@ with tabs[2]:
 
 with tabs[3]:
     st.write("")
-    qdrant_df, last_update_date = ui_utils.get_library_catalog_excel_and_date()
+    qdrant_df, last_update_date = get_library_catalog_excel_and_date()
     try:
         if qdrant_df is not None:
             num_items_qdrant = len(qdrant_df)

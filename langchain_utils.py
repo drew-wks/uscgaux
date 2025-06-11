@@ -1,6 +1,6 @@
 #  Utilities for langchain
 
-from env_config import get_config
+from env_config import rag_config
 import logging
 from typing import List, Dict, Any
 from langchain_openai import OpenAIEmbeddings
@@ -13,7 +13,6 @@ from googleapiclient.discovery import Resource
 from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import Document
-
 
 
 def init_vectorstore(client: QdrantClient) -> QdrantVectorStore:
@@ -31,8 +30,8 @@ def init_vectorstore(client: QdrantClient) -> QdrantVectorStore:
         Exception: For all other initialization errors.
     """
     try:
-        collection_name = get_config("qdrant_collection_name")
-        embedding_model = get_config("embedding_model")
+        collection_name = rag_config("qdrant_collection_name")
+        embedding_model = rag_config("embedding_model")
     except KeyError as e:
         logging.error(f"Missing required RAG_CONFIG key: {e}")
         raise
@@ -130,10 +129,10 @@ def chunk_documents(
         Exception: If any error occurs during chunking.
     """
     try:
-        chunk_size=get_config("chunk_size"),
-        chunk_overlap=get_config("chunk_overlap"),
-        length_function=get_config("length_function"),
-        separators=get_config("separators")
+        chunk_size=rag_config("chunk_size"),
+        chunk_overlap=rag_config("chunk_overlap"),
+        length_function=rag_config("length_function"),
+        separators=rag_config("separators")
     except KeyError as e:
         logging.error(f"Missing required RAG_CONFIG key: {e}")
         raise

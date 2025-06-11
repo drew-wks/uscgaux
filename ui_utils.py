@@ -1,15 +1,22 @@
-import datetime
-import requests
-import streamlit as st 
-import pandas as pd
+import os
 from pathlib import Path
 from fnmatch import fnmatch
 import re
+from typing import Tuple
+import logging
+import datetime
+import requests
+import pandas as pd
+import streamlit as st 
 from streamlit_authenticator import Authenticate
+from gcp_utils import init_sheets_client, init_drive_client
+from qdrant_utils import init_qdrant_client
 
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+from env_config import env_config
 
+config = env_config()
 
 def init_auth():
     """Gate the app behind Google OAuth2 via streamlit-authenticator."""
@@ -18,7 +25,7 @@ def init_auth():
     #   Google policy is OAuth clients that have remained inactive for six months will be automatically deleted. Inactivity is 
     #   determined based on the absence of token exchanges or client updates.
     
-    if os.getenv("FORCE_USER_AUTH") == "false":
+    if config["FORCE_USER_AUTH"] == "false":
         return  # Skip auth when testing locally. Run & Debug launch.json is set to look for this switch
     
     credentials_conf = {
@@ -114,7 +121,51 @@ def apply_styles():
     st.markdown(BLOCK_CONTAINER_2, unsafe_allow_html=True)
     st.image(LOGO, use_container_width=True)
 
+# THIS DOES NOT WORK RIGHT NOW
+@st.cache_resource
+def init_cached_clients():
+    """
+    Initializes and returns cached instances of Google Drive, Google Sheets, and Qdrant clients.
+    Requires the following secrets to be set in `.streamlit/secrets.toml` or Streamlit Cloud:
+    - [gcp_service_account]
+    - qdrant_location
 
+    Returns:
+        Tuple: (drive_client, sheets_client, qdrant_client)
+    """
+    # --- Google clients ---
+    creds_info = st.secrets.get("gcp_service_account")
+    if not creds_info:
+        st.error("❌ Missing `[gcp_service_account]` in your secrets.")
+        st.stop()
+
+    try:
+        drive_client = init_drive_client(creds_info)
+    except Exception as e:
+        st.error(f"❌ Could not connect to Google Drive: {e}")
+        st.stop()
+
+    try:
+        sheets_client = init_sheets_client(creds_info)
+    except Exception as e:
+        st.error(f"❌ Could not connect to Google Sheets: {e}")
+        st.stop()
+
+    # --- Qdrant client ---
+    location = st.secrets.get("qdrant_location")
+    if not location:
+        st.error("❌ Missing `qdrant_location` in your secrets.")
+        st.stop()
+
+    try:
+        qdrant_client = init_qdrant_client(location)
+    except Exception as e:
+        st.error(f"❌ Could not connect to Qdrant: {e}")
+        st.stop()
+
+    return drive_client, sheets_client, qdrant_client
+
+    
 @st.cache_data
 def get_openai_api_status():
     '''Notify user if OpenAI is down so they don't blame the app'''
@@ -246,12 +297,3 @@ def get_library_catalog_excel_and_date():
     # Format the timestamp from the filename to ISO 8601
     last_update_date = file_timestamp.strftime('%Y-%m-%dT%H:%M:%SZ')
     return df, last_update_date
-
-
-
-def main():
-    logging.info("Running utils.py directly")
-    # You can include test code for utility functions here, if desired
-
-if __name__ == "__main__":
-    main()

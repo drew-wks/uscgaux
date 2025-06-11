@@ -3,10 +3,14 @@ import logging
 from typing import List, Dict, Union
 import pandas as pd
 from qdrant_client import QdrantClient
-from qdrant_client.http import models, exceptions as qdrant_exceptions
+from qdrant_client.http import exceptions as qdrant_exceptions
+from qdrant_client import models
+
 from env_config import RAG_CONFIG
 
+from env_config import env_config
 
+config = env_config()
 
 def init_qdrant_client(mode: str = "cloud") -> QdrantClient:
     """
@@ -25,12 +29,12 @@ def init_qdrant_client(mode: str = "cloud") -> QdrantClient:
     try:
         if mode == "cloud":
             client = QdrantClient(
-                url=os.environ["QDRANT_URL"],
-                api_key=os.environ["QDRANT_API_KEY"]
+                url=config["QDRANT_URL"],
+                api_key=config["QDRANT_API_KEY"]
             )
         elif mode == "local":
             client = QdrantClient(
-                path=os.environ["QDRANT_PATH"]
+                path=config["QDRANT_PATH"]
             )
         else:
             raise ValueError(f"Invalid mode '{mode}'. Qdrant client must be 'cloud' or 'local'.")
@@ -189,7 +193,7 @@ def get_all_pdf_ids_in_qdrant(client: QdrantClient, collection_name: str) -> Lis
             scroll_filter=None,
             with_payload=True,
             with_vectors=False,
-            limit=10000
+            limit=100000
         )
 
         records = all_records[0]
@@ -220,6 +224,95 @@ def get_all_pdf_ids_in_qdrant(client: QdrantClient, collection_name: str) -> Lis
         return []
 
 
+
+def get_summaries_by_pdf_id(client: QdrantClient, collection_name: str, pdf_ids: List[str]) -> pd.DataFrame:
+    """
+    Retrieve summaries of specific records in a Qdrant collection, grouped by metadata.pdf_id.
+
+    Args:
+        client (QdrantClient): Qdrant client instance.
+        collection_name (str): Name of the Qdrant collection.
+        pdf_ids (List[str]): List of pdf_ids to retrieve summaries for.
+
+    Returns:
+        pd.DataFrame: A dataframe with columns:
+            - pdf_id (str)
+            - pdf_file_name (str, if available)
+            - title (str, if available)
+            - record_count (int)
+            - page_count (int, max page_number + 1)
+            - point_ids (List[str])
+    """
+    if not pdf_ids:
+        return pd.DataFrame(columns=["pdf_id", "pdf_file_name", "title", "record_count", "page_count", "point_ids"])
+
+    summary = {}
+    scroll_offset = None
+    while True:
+        results, scroll_offset = client.scroll(
+            collection_name=collection_name,
+            scroll_filter=models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key="metadata.pdf_id",
+                        match=models.MatchAny(any=pdf_ids)
+                    )
+                ]
+            ),
+            with_payload=True,
+            with_vectors=False,
+            limit=100000,
+            offset=scroll_offset
+        )
+
+        for record in results:
+            payload = record.payload
+            point_id = record.id
+
+            if not isinstance(payload, dict):
+                logging.warning(f"🚫 Skipping record with non-dict payload: {payload}")
+                continue
+
+            metadata = payload.get("metadata", {})
+            if not isinstance(metadata, dict):
+                logging.warning(f"🚫 Skipping record with malformed metadata: {payload}")
+                continue
+            
+            pdf_id = metadata.get("pdf_id")
+            if not pdf_id:
+                logging.warning(f"⚠️ Skipping record without pdf_id: {payload}")
+                continue
+            
+            title = metadata.get("title")
+            pdf_file_name = metadata.get("pdf_file_name")
+            page_count = metadata.get("page_count")
+
+            if pdf_id not in summary:
+                summary[pdf_id] = {
+                    "pdf_id": pdf_id,
+                    "title": title,
+                    "pdf_file_name": pdf_file_name,
+                    "page_count": page_count,
+                    "record_count": 1,
+                    "point_ids": [point_id]
+                }
+            else:
+                summary[pdf_id]["record_count"] += 1
+                summary[pdf_id]["point_ids"].append(point_id)
+                if not summary[pdf_id]["title"] and title:
+                    summary[pdf_id]["title"] = title
+                if not summary[pdf_id]["pdf_file_name"] and pdf_file_name:
+                    summary[pdf_id]["pdf_file_name"] = pdf_file_name
+                if not summary[pdf_id]["page_count"] and page_count:
+                    summary[pdf_id]["page_count"] = page_count
+
+        if scroll_offset is None:
+            break
+
+    return pd.DataFrame(summary.values())
+
+
+    
 
 def delete_records_by_pdf_id(
     client: QdrantClient,

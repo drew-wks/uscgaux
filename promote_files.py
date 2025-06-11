@@ -4,19 +4,21 @@ import logging
 from gspread.client import Client as SheetsClient
 from googleapiclient.discovery import Resource as DriveClient
 from qdrant_client import QdrantClient
-from env_config import get_config
+from env_config import rag_config
 from gcp_utils import move_pdf, fetch_sheet_as_df, fetch_sheet
 from library_utils import validate_core_metadata_format, find_duplicates_against_reference, validate_all_rows_format
 from qdrant_utils import in_qdrant
 from langchain_utils import pdf_to_Docs_via_Drive
 from log_writer import log_event
 
+from env_config import env_config
 
+config = env_config()
 
 def promote_files(drive_client: DriveClient, sheets_client: SheetsClient, qdrant_client: QdrantClient):
     
     # VALIDATE all rows
-    library_df = fetch_sheet_as_df(sheets_client, os.environ["LIBRARY_UNIFIED"])
+    library_df = fetch_sheet_as_df(sheets_client, config["LIBRARY_UNIFIED"])
     valid_df, invalid_df, log_df = validate_all_rows_format(library_df)
 
     if not invalid_df.empty:
@@ -48,7 +50,7 @@ def promote_files(drive_client: DriveClient, sheets_client: SheetsClient, qdrant
         file_id = row.get("google_id")
 
         # Confirm pdf_id is not already in Qdrant
-        if in_qdrant(qdrant_client, get_config("collection_name"), pdf_id):
+        if in_qdrant(qdrant_client, rag_config("qdrant_collection_name"), pdf_id):
             logging.warning(f"{pdf_id} already exists in Qdrant. Skipping promotion.")
             continue
 
@@ -59,15 +61,15 @@ def promote_files(drive_client: DriveClient, sheets_client: SheetsClient, qdrant
             logging.warning(f"Failed to extract docs for {filename}: {pdf_id}. Skipping.")
             continue
 
-        qdrant_client.upload_collection_batch(collection_name=get_config("qdrant_collection_name"), documents=docs)
+        qdrant_client.upload_collection_batch(collection_name=rag_config("qdrant_collection_name"), documents=docs)
 
         # Move PDF to PDF_LIVE folder
-        move_pdf(drive_client, file_id, os.environ["PDF_LIVE"])
+        move_pdf(drive_client, file_id, config["PDF_LIVE"])
 
         # Change status in LIBRARY_UNIFIED → live
         row["status"] = "live"
         row["status_timestamp"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        sheet = fetch_sheet(sheets_client, os.environ["LIBRARY_UNIFIED"])
+        sheet = fetch_sheet(sheets_client, config["LIBRARY_UNIFIED"])
         sheet.update(f"A{idx+2}", [row.tolist()])
 
         log_event(sheets_client, "promoted_to_live", pdf_id, filename)
