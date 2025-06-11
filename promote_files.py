@@ -15,6 +15,39 @@ from env_config import env_config
 
 config = env_config()
 
+def upsert_single_file(drive_client: DriveClient, sheets_client: SheetsClient, qdrant_client: QdrantClient, row, idx):
+    pdf_id = str(row.get("pdf_id", ""))
+    filename = str(row.get("pdf_file_name", ""))
+    file_id = str(row.get("google_id", ""))
+
+    # Confirm pdf_id is not already in Qdrant
+    if in_qdrant(qdrant_client, rag_config("qdrant_collection_name"), pdf_id):
+        logging.warning("%s already exists in Qdrant. Skipping promotion.", pdf_id)
+        return "rejected", pdf_id
+
+    # Fetch PDF, extract Docs, inject metadata, chunk, and send to Qdrant
+    docs = pdf_to_Docs_via_Drive(drive_client, file_id, row.to_frame().T)
+    
+    if not docs:
+        logging.warning("Failed to extract docs for %s: %s. Skipping.", filename, pdf_id)
+        return "failed", pdf_id
+
+    docs_chunks = chunk_Docs(docs, RAG_CONFIG)
+    qdrant = init_vectorstore(qdrant_client)
+    qdrant.add_documents(docs_chunks)
+
+    # Move PDF to PDF_LIVE folder
+    move_pdf(drive_client, file_id, config["PDF_LIVE"])
+
+    # Change status in LIBRARY_UNIFIED → live
+    row["status"] = "live"
+    row["status_timestamp"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    sheet = fetch_sheet(sheets_client, config["LIBRARY_UNIFIED"])
+    sheet.update(f"A{idx+2}", [row.tolist()])
+
+    log_event(sheets_client, "promoted_to_live", pdf_id, filename)
+    return "uploaded", pdf_id
+
 def promote_files(drive_client: DriveClient, sheets_client: SheetsClient, qdrant_client: QdrantClient):
     
     # VALIDATE all rows
@@ -48,39 +81,13 @@ def promote_files(drive_client: DriveClient, sheets_client: SheetsClient, qdrant
         if row.get("status") not in TARGET_STATUSES:
             continue
 
-        pdf_id = str(row.get("pdf_id", ""))
-        filename = str(row.get("pdf_file_name", ""))
-        file_id = str(row.get("google_id", ""))
-
-        # Confirm pdf_id is not already in Qdrant
-        if in_qdrant(qdrant_client, rag_config("qdrant_collection_name"), pdf_id):
-            logging.warning("%s already exists in Qdrant. Skipping promotion.", pdf_id)
+        result, pdf_id = upsert_single_file(drive_client, sheets_client, qdrant_client, row, idx)
+        if result == "uploaded":
+            uploaded_files.append(pdf_id)
+        elif result == "rejected":
             rejected_files.append(pdf_id)
-            continue
-
-        # Fetch PDF, extract Docs, inject metadata, chunk, and send to Qdrant
-        docs = pdf_to_Docs_via_Drive(drive_client, file_id, row.to_frame().T)
-        
-        if not docs:
-            logging.warning("Failed to extract docs for %s: %s. Skipping.", filename, pdf_id)
+        elif result == "failed":
             failed_files.append(pdf_id)
-            continue
-
-        docs_chunks = chunk_Docs(docs, RAG_CONFIG)
-        qdrant = init_vectorstore(qdrant_client)
-        qdrant.add_documents(docs_chunks)
-
-        # Move PDF to PDF_LIVE folder
-        move_pdf(drive_client, file_id, config["PDF_LIVE"])
-
-        # Change status in LIBRARY_UNIFIED → live
-        row["status"] = "live"
-        row["status_timestamp"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        sheet = fetch_sheet(sheets_client, config["LIBRARY_UNIFIED"])
-        sheet.update(f"A{idx+2}", [row.tolist()])
-
-        log_event(sheets_client, "promoted_to_live", pdf_id, filename)
-        uploaded_files.append(pdf_id)
 
     logging.info("\n✅ Uploaded files:")
     for item in uploaded_files:
