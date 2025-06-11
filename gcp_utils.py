@@ -253,6 +253,22 @@ def move_pdf(drive_client: DriveClient, file_id, target_folder_id):
     except Exception as e:
         logging.error("Failed to move file %s to folder %s: %s", file_id, target_folder_id, e)
         return False
+
+
+def file_exists(drive_client: DriveClient, file_id: str) -> bool:
+    """Check if a file exists in Google Drive."""
+    try:
+        drive_client.files().get(fileId=file_id, fields="id").execute()
+        return True
+    except HttpError as e:
+        if getattr(e, "resp", None) and getattr(e.resp, "status", None) == 404:
+            logging.info("File not found in Drive: %s", file_id)
+        else:
+            logging.warning("Error checking file existence for %s: %s", file_id, e)
+        return False
+    except Exception as e:
+        logging.warning("Error checking file existence for %s: %s", file_id, e)
+        return False
     
     
 
