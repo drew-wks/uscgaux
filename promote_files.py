@@ -26,7 +26,7 @@ def promote_files(drive_client: DriveClient, sheets_client: SheetsClient, qdrant
         return
     
 
-    TARGET_STATUSES = ["new_validated", "clonedlive_validated"]
+    TARGET_STATUSES = ["new_tagged", "clonedlive_tagged"]
     
     # Ensure only one row in TARGET_STATUS exists for this pdf_id
     to_promote_df = valid_df[valid_df["status"].isin(TARGET_STATUSES)]
@@ -35,7 +35,7 @@ def promote_files(drive_client: DriveClient, sheets_client: SheetsClient, qdrant
     fields_to_check=[{"pdf_id": pdf_id} for pdf_id in to_promote_df["pdf_id"].dropna().unique()]
 )
     if not duplicate_rows.empty:
-        logging.error("%s duplicate validated pdf_id(s) found. Promotion halted.", len(duplicate_rows))
+        logging.error("%s duplicate pdf_id(s) found in promoted rows. Promotion halted.", len(duplicate_rows))
         return
 
     to_promote_df = to_promote_df.reset_index(drop=True)
@@ -45,9 +45,9 @@ def promote_files(drive_client: DriveClient, sheets_client: SheetsClient, qdrant
         if row.get("status") not in TARGET_STATUSES:
             continue
 
-        pdf_id = row.get("pdf_id")
-        filename = row.get("pdf_file_name")
-        file_id = row.get("google_id")
+        pdf_id = str(row.get("pdf_id", ""))
+        filename = str(row.get("pdf_file_name", ""))
+        file_id = str(row.get("google_id", ""))
 
         # Confirm pdf_id is not already in Qdrant
         if in_qdrant(qdrant_client, rag_config("qdrant_collection_name"), pdf_id):
@@ -55,8 +55,9 @@ def promote_files(drive_client: DriveClient, sheets_client: SheetsClient, qdrant
             continue
 
         # Fetch PDF, extract Docs, inject metadata, chunk, and send to Qdrant
-        # TODO THIS IS A A PLACEHOLDER
-        docs = pdf_to_Docs_via_Drive(drive_client, pdf_id, planned_validated_metadata)
+        # TODO THIS IS A PLACEHOLDER
+        docs = pdf_to_Docs_via_Drive(drive_client, file_id, row.to_frame().T)
+        
         if not docs:
             logging.warning("Failed to extract docs for %s: %s. Skipping.", filename, pdf_id)
             continue

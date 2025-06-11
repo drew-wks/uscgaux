@@ -326,6 +326,39 @@ def fetch_rows_by_status(catalog_df, keywords):
     return matched_rows
 
 
+def change_status_in_df(
+    df: pd.DataFrame,
+    current_status: str,
+    new_status: str
+) -> pd.DataFrame:
+    """
+    Update the 'status' column in the DataFrame from `current_status` to `new_status`.
+
+    Args:
+        df (pd.DataFrame): The catalog DataFrame.
+        current_status (str): Status value to search for (partial, case-insensitive match).
+        new_status (str): Status value to apply to matching rows.
+
+    Returns:
+        pd.DataFrame: A copy of the original DataFrame with status updates applied.
+    """
+    if "status" not in df.columns:
+        logging.warning("'status' column not found in DataFrame.")
+        return df
+
+    df_copy = df.copy()
+    mask = df_copy["status"].astype(str).str.lower().str.contains(current_status.lower())
+
+    if mask.sum() == 0:
+        logging.info("No rows found with status containing '%s'", current_status)
+        return df_copy
+
+    updated_count = mask.sum()
+    df_copy.loc[mask, "status"] = new_status
+    logging.info("✅ Updated %s row(s) from status '%s' to '%s'", updated_count, current_status, new_status)
+
+    return df_copy
+
 
 def remove_rows(sheets_client, spreadsheet_id, row_indices, sheet_name="Sheet1"):
     """
@@ -348,6 +381,7 @@ def remove_rows(sheets_client, spreadsheet_id, row_indices, sheet_name="Sheet1")
 
     except Exception as e:
         logging.error("Failed to delete rows from %s: %s", sheet_name, e)
+
 
 
 

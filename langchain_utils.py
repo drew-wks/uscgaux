@@ -1,18 +1,19 @@
 #  Utilities for langchain
 
-from env_config import rag_config
 import logging
 from typing import List, Dict, Any
-from langchain_openai import OpenAIEmbeddings
-from langchain_qdrant import QdrantVectorStore
-import pypdf
-from langchain_community.document_loaders import PyPDFLoader
-from qdrant_client import QdrantClient
 from io import BytesIO
-from googleapiclient.discovery import Resource
+import pandas as pd
+from qdrant_client import QdrantClient
+import pypdf
+from langchain_community.document_loaders.unstructured import UnstructuredFileIOLoader
 from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.schema import Document
+from langchain_openai import OpenAIEmbeddings
+from langchain_qdrant import QdrantVectorStore
+from googleapiclient.discovery import Resource
+
+from env_config import rag_config
 
 
 def init_vectorstore(client: QdrantClient) -> QdrantVectorStore:
@@ -56,50 +57,32 @@ def init_vectorstore(client: QdrantClient) -> QdrantVectorStore:
 def pdf_to_Docs_via_Drive(
     drive_client: Resource,
     file_id: str,
-    planned_validated_metadata: Dict[str, Any]
+    metadata_df: pd.DataFrame
 ) -> List[Document]:
-    """
-    Extracts text and metadata from a PDF in Google Drive and returns a list of LangChain page-level Document objects.
-
-    Args:
-        drive_client (Resource): Authenticated Google Drive client.
-        file_id (str): ID of the PDF file in Google Drive.
-        planned_validated_metadata (dict): Metadata to apply to each Document.
-
-    Returns:
-        List[Document]: List of page-level LangChain Document objects.
-    """
-
     docs_pages = []
+    if metadata_df.shape[0] != 1:
+        raise ValueError("metadata_df must contain exactly one row")
+    metadata_dict = metadata_df.iloc[0].to_dict()
 
     try:
-        # Download the PDF from Drive
+        # Download PDF into memory
         request = drive_client.files().get_media(fileId=file_id)
-        file_stream = BytesIO()
-        request.execute(fd=file_stream)
-        file_stream.seek(0)
+        file_bytes = BytesIO()
+        request.execute(fd=file_bytes)
+        file_bytes.seek(0)
 
-        # Load with PyPDFLoader
-        loader = PyPDFLoader(file_stream)
+        # Load via UnstructuredFileIOLoader
+        loader = UnstructuredFileIOLoader(file_bytes, mode="elements")
         docs = loader.load()
 
-        # Use pypdf to extract additional metadata
-        file_stream.seek(0)
-        reader = pypdf.PdfReader(file_stream)
-        enriched_metadata = {
-            'page_count': len(reader.pages),
-        }
-        planned_validated_metadata.update(enriched_metadata)
-        planned_validated_metadata.pop('pdf_file_name', None)
+        # Extract page count metadata via pypdf
+        file_bytes.seek(0)
+        reader = pypdf.PdfReader(file_bytes)
+        metadata_dict["page_count"] = len(reader.pages)
 
-        # Add metadata to each doc
+        # Update metadata on each doc
         for doc in docs:
-            # Adjust for human-friendly page numbering
-            raw_page = doc.metadata.get("page")
-            if raw_page is not None:
-                doc.metadata["page_number"] = raw_page + 1
-
-            doc.metadata.update(planned_validated_metadata)
+            doc.metadata.update(metadata_dict)
             docs_pages.append(doc)
 
         logging.info("Processed file_id: %s | Pages: %s", file_id, len(docs_pages))
