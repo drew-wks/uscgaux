@@ -5,8 +5,8 @@ from googleapiclient.discovery import Resource as DriveClient
 from qdrant_client import QdrantClient
 from env_config import rag_config
 from library_utils import fetch_rows_by_status, remove_rows
-from gcp_utils import get_folder_name, fetch_sheet_as_df
-from qdrant_utils import delete_records_by_pdf_id
+from gcp_utils import get_folder_name, fetch_sheet_as_df, file_exists
+from qdrant_utils import delete_records_by_pdf_id, in_qdrant
 from log_writer import log_event
 from env_config import env_config
 
@@ -34,22 +34,41 @@ def delete_tagged(drive_client: DriveClient, sheets_client: SheetsClient, qdrant
         row_index = library_df[library_df["pdf_id"] == pdf_id].index.tolist()
 
         # --- DELETE FILE ---
-        try:
+        folder_name = "unknown_folder"
+        if file_exists(drive_client, file_id):
             folder_name = get_folder_name(drive_client, file_id)
-            drive_client.files().delete(fileId=file_id).execute()
-            log_event(sheets_client, f"file_deleted from {folder_name}", pdf_id, filename, extra_columns=[original_status])
-        except Exception as e:
-            logging.warning("Failed to delete file %s (ID: %s): %s", filename, file_id, e)
-            folder_name = "unknown_folder"
+            try:
+                drive_client.files().delete(fileId=file_id).execute()
+                log_event(
+                    sheets_client,
+                    f"file_deleted from {folder_name}",
+                    pdf_id,
+                    filename,
+                    extra_columns=[original_status],
+                )
+            except Exception as e:
+                logging.warning(
+                    "Failed to delete file %s (ID: %s): %s", filename, file_id, e
+                )
+        else:
+            logging.info("File ID %s not found in Drive. Skipping deletion.", file_id)
 
         # --- DELETE QDRANT RECORD ---
+        collection_name = rag_config("qdrant_collection_name")
         if original_status.startswith("new_for_deletion"):
             logging.info("Skipping Qdrant deletion for new record: %s", pdf_id)
         else:
-            try:
-                delete_records_by_pdf_id(qdrant_client, rag_config("qdrant_collection_name"), pdf_id)
-            except Exception as e:
-                logging.warning("Failed to delete Qdrant record for %s: %s", pdf_id, e)
+            if in_qdrant(qdrant_client, collection_name, pdf_id):
+                try:
+                    delete_records_by_pdf_id(qdrant_client, [pdf_id], collection_name)
+                except Exception as e:
+                    logging.warning(
+                        "Failed to delete Qdrant record for %s: %s", pdf_id, e
+                    )
+            else:
+                logging.info(
+                    "PDF ID %s not found in Qdrant. Skipping deletion.", pdf_id
+                )
 
         # --- DELETE ROW FROM SHEET ---
         try:
