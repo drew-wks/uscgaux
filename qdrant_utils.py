@@ -24,7 +24,7 @@ def init_qdrant_client(mode: str = "cloud") -> QdrantClient:
         QdrantClient: Initialized and verified client instance
     """
     mode = mode.lower()
-    logging.info(f"Initializing Qdrant client in '{mode}' mode...")
+    logging.info("Initializing Qdrant client in '%s' mode...", mode)
 
     try:
         if mode == "cloud":
@@ -39,7 +39,7 @@ def init_qdrant_client(mode: str = "cloud") -> QdrantClient:
         else:
             raise ValueError(f"Invalid mode '{mode}'. Qdrant client must be 'cloud' or 'local'.")
     except Exception as e:
-        logging.error(f"Failed to initialize Qdrant client: {e}")
+        logging.error("Failed to initialize Qdrant client: %s", e)
         raise
 
     # Confirm configured collection exists
@@ -47,13 +47,13 @@ def init_qdrant_client(mode: str = "cloud") -> QdrantClient:
     if not collections:
         logging.warning("No collections found in Qdrant.")
     else:
-        logging.info(f"Available Qdrant collections: {collections}")
+        logging.info("Available Qdrant collections: %s", collections)
 
     expected_collection = RAG_CONFIG.get("qdrant_collection_name")
     if expected_collection in collections:
-        logging.info(f"✅ Confirmed Qdrant collection '{expected_collection}' exists")
+        logging.info("✅ Confirmed Qdrant collection '%s' exists", expected_collection)
     else:
-        logging.error(f"❌ Collection '{expected_collection}' not found in Qdrant!")
+        logging.error("❌ Collection '%s' not found in Qdrant!", expected_collection)
         raise ValueError(f"Collection '{expected_collection}' does not exist in Qdrant.")
 
     return client
@@ -81,7 +81,7 @@ def which_qdrant(client: QdrantClient) -> str:
         else:
             qdrant_location = "unknown"
 
-        logging.info(f"Qdrant location detected: {qdrant_location}")
+        logging.info("Qdrant location detected: %s", qdrant_location)
 
     except qdrant_exceptions.UnexpectedResponse as e:
         if "404" in str(e):
@@ -90,7 +90,7 @@ def which_qdrant(client: QdrantClient) -> str:
             raise
         qdrant_location = "unknown"
     except Exception as e:
-        logging.warning(f"An unexpected error occurred while detecting Qdrant location: {e}")
+        logging.warning("An unexpected error occurred while detecting Qdrant location: %s", e)
         qdrant_location = "unknown"
 
     return qdrant_location
@@ -111,7 +111,7 @@ def list_collections(client: QdrantClient) -> List[str]:
         collection_names = [col.name for col in collections.collections]
         return collection_names
     except Exception as e:
-        logging.warning(f"Error listing collections: {e}")
+        logging.warning("Error listing collections: %s", e)
         return []
 
 
@@ -145,10 +145,10 @@ def in_qdrant(client: QdrantClient, collection_name: str, pdf_id: str) -> bool:
             limit=1
         )
         exists = len(search_result) > 0
-        logging.info(f"PDF ID '{pdf_id}' existence in collection '{collection_name}': {exists}")
+        logging.info("PDF ID '%s' existence in collection '%s': %s", pdf_id, collection_name, exists)
         return exists
     except Exception as e:
-        logging.warning(f"Error checking PDF ID in Qdrant: {e}")
+        logging.warning("Error checking PDF ID in Qdrant: %s", e)
         return False
 
 
@@ -168,10 +168,10 @@ def check_record_exists(client: QdrantClient, collection_name: str, record_id: U
     try:
         point = client.get_point(collection_name=collection_name, point_id=record_id)
         exists = point is not None
-        logging.info(f"Record ID '{record_id}' existence in collection '{collection_name}': {exists}")
+        logging.info("Record ID '%s' existence in collection '%s': %s", record_id, collection_name, exists)
         return exists
     except Exception as e:
-        logging.warning(f"Error checking record existence in Qdrant: {e}")
+        logging.warning("Error checking record existence in Qdrant: %s", e)
         return False
 
 
@@ -203,24 +203,24 @@ def get_all_pdf_ids_in_qdrant(client: QdrantClient, collection_name: str) -> Lis
             payload = record.payload
 
             if not isinstance(payload, dict):
-                logging.warning(f"🚫 Payload at index {idx} is not a dict: {payload}")
+                logging.warning("🚫 Payload at index %s is not a dict: %s", idx, payload)
                 print(f"⚠️ Malformed payload: {payload}")
                 continue
 
             metadata = payload.get("metadata")
             if not isinstance(metadata, dict):
-                logging.warning(f"🚫 metadata missing or not a dict at index {idx}: {payload}")
+                logging.warning("🚫 metadata missing or not a dict at index %s: %s", idx, payload)
                 continue
 
             pdf_id = metadata.get("pdf_id")
             if pdf_id:
                 unique_pdf_ids.add(str(pdf_id))
 
-        logging.info(f"Retrieving all {len(unique_pdf_ids)} pdf_ids from Qdrant collection.")
+        logging.info("Retrieving all %s pdf_ids from Qdrant collection.", len(unique_pdf_ids))
         return list(unique_pdf_ids)
 
     except Exception as e:
-        logging.error(f"Error retrieving pdf_ids from Qdrant: {e}")
+        logging.error("Error retrieving pdf_ids from Qdrant: %s", e)
         return []
 
 
@@ -270,17 +270,17 @@ def get_summaries_by_pdf_id(client: QdrantClient, collection_name: str, pdf_ids:
             point_id = record.id
 
             if not isinstance(payload, dict):
-                logging.warning(f"🚫 Skipping record with non-dict payload: {payload}")
+                logging.warning("🚫 Skipping record with non-dict payload: %s", payload)
                 continue
 
             metadata = payload.get("metadata", {})
             if not isinstance(metadata, dict):
-                logging.warning(f"🚫 Skipping record with malformed metadata: {payload}")
+                logging.warning("🚫 Skipping record with malformed metadata: %s", payload)
                 continue
             
             pdf_id = metadata.get("pdf_id")
             if not pdf_id:
-                logging.warning(f"⚠️ Skipping record without pdf_id: {payload}")
+                logging.warning("⚠️ Skipping record without pdf_id: %s", payload)
                 continue
             
             title = metadata.get("title")
@@ -340,7 +340,7 @@ def delete_records_by_pdf_id(
 
     for pdf_id in unique_pdf_ids:
         try:
-            logging.info(f"🗑️ Deleting records for pdf_id: {pdf_id}")
+            logging.info("🗑️ Deleting records for pdf_id: %s", pdf_id)
             filter_condition = models.Filter(
                 must=[
                     models.FieldCondition(
@@ -353,8 +353,8 @@ def delete_records_by_pdf_id(
                 collection_name=collection_name,
                 points_selector=filter_condition
             )
-            logging.info(f"✅ Deleted points for pdf_id {pdf_id}. Operation ID: {result.operation_id}")
+            logging.info("✅ Deleted points for pdf_id %s. Operation ID: %s", pdf_id, result.operation_id)
             if log_event_fn:
                 log_event_fn("orphan_qdrant_record_deleted", pdf_id, f"Deleted from {collection_name}")
         except Exception as e:
-            logging.error(f"❌ Failed to delete records for pdf_id {pdf_id}: {e}")
+            logging.error("❌ Failed to delete records for pdf_id %s: %s", pdf_id, e)

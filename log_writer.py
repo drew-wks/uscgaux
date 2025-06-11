@@ -104,10 +104,10 @@ def log_events(
         ws.append_rows(rows, value_input_option="USER_ENTERED")  # type: ignore
 
         log_url = f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}"
-        logging.info(f"Admin event log written to: {log_url}")
+        logging.info("Admin event log written to: %s", log_url)
 
     except Exception as e:
-        logging.error(f"Failed to append log batch: {e}")
+        logging.error("Failed to append log batch: %s", e)
 
     return logged_events
 
@@ -117,5 +117,5 @@ def log_events(
 def print_log_link():
     log_sheet_id = config["EVENT_LOG"]
     log_url = f"https://docs.google.com/spreadsheets/d/{log_sheet_id}"
-    logging.info(f"📄 Admin event log written to: {log_url}")
+    logging.info("📄 Admin event log written to: %s", log_url)
 

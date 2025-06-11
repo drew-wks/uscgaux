@@ -90,7 +90,7 @@ def get_folder_name(drive_client: DriveClient, file_id: str) -> str:
         folder_metadata = drive_client.files().get(fileId=parent_ids[0], fields='name').execute()
         return folder_metadata.get("name", "Unknown")
     except Exception as e:
-        logging.warning(f"Failed to fetch folder name for file ID {file_id}: {e}")
+        logging.warning("Failed to fetch folder name for file ID %s: %s", file_id, e)
         return "Unknown"
 
 
@@ -121,7 +121,7 @@ def list_pdfs_in_folder(drive_client: DriveClient, folder_id: str) -> pd.DataFra
         df["URL"] = df["ID"].apply(lambda x: f"https://drive.google.com/file/d/{x}/view")
         return df
     except Exception as e:
-        logging.error(f"Could not fetch PDFs from Drive: {e}")
+        logging.error("Could not fetch PDFs from Drive: %s", e)
         # Return an empty DataFrame with the expected columns
         return pd.DataFrame(columns=["Name", "ID", "URL"])
 
@@ -141,7 +141,7 @@ def fetch_pdf(drive_client: DriveClient, file_id):
         fh.seek(0)
         return fh
     except HttpError as e:
-        logging.error(f"Failed to download PDF file with ID {file_id}: {e}")
+        logging.error("Failed to download PDF file with ID %s: %s", file_id, e)
         return None
 
 
@@ -160,7 +160,7 @@ def fetch_sheet(sheets_client: SheetsClient, spreadsheet_id: str) -> Worksheet |
     try:
         return sheets_client.open_by_key(spreadsheet_id).sheet1
     except Exception as e:
-        logging.error(f"[fetch_sheet] Failed to fetch worksheet: {e}")
+        logging.error("[fetch_sheet] Failed to fetch worksheet: %s", e)
         return None
     
 
@@ -179,13 +179,13 @@ def fetch_sheet_as_df(sheets_client: SheetsClient, spreadsheet_id: str) -> pd.Da
     try:
         sheet = fetch_sheet(sheets_client, spreadsheet_id)
         if sheet is None:
-            logging.error(f"Worksheet {spreadsheet_id} is empty.")
+            logging.error("Worksheet %s is empty.", spreadsheet_id)
             return pd.DataFrame()
         df = get_as_dataframe(sheet, evaluate_formulas=True, dtype=str)
         df = df.fillna("")  # Prevents NaN values
         return df
     except Exception as e:
-        logging.error(f"[fetch_sheet_as_df] Failed to convert worksheet to DataFrame: {e}")
+        logging.error("[fetch_sheet_as_df] Failed to convert worksheet to DataFrame: %s", e)
         return pd.DataFrame()
     
 
@@ -218,7 +218,7 @@ def upload_pdf(drive_client: DriveClient, file_obj, file_name: str, folder_id: s
 
         return uploaded_file.get("id")
     except Exception as e:
-        logging.error(f"Failed to upload file '{file_name}' to Drive: {e}")
+        logging.error("Failed to upload file '%s' to Drive: %s", file_name, e)
         return None
 
 
@@ -248,7 +248,7 @@ def move_pdf(drive_client: DriveClient, file_id, target_folder_id):
         ).execute()
         return True
     except Exception as e:
-        logging.error(f"Failed to move file {file_id} to folder {target_folder_id}: {e}")
+        logging.error("Failed to move file %s to folder %s: %s", file_id, target_folder_id, e)
         return False
     
     

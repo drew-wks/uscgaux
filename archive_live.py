@@ -74,7 +74,7 @@ def archive_tagged(
                 row_indices=row_index
             )
         except Exception as e:
-            logging.error(f"Failed to remove row {i} for {pdf_id}: {e}")
+            logging.error("Failed to remove row %s for %s: %s", i, pdf_id, e)
 
         archived_rows.append(row)
         log_event(sheets_client, "archived", pdf_id, filename)
