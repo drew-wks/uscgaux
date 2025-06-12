@@ -1,6 +1,6 @@
-import os, logging, json
+import os, logging
 from dotenv import load_dotenv, dotenv_values
-
+from pathlib import Path
 
 logging.basicConfig(
     level=logging.INFO,  # or DEBUG
@@ -21,6 +21,8 @@ GCP_CONFIG = {
     "EVENT_LOG": "1MYxGVdMqd3DkRYD0CtQuVFSmHn6TT_p1CDPJiMS2Nww",  # a Google Sheet
     "LIBRARY_CATALOG_ID": "16F5tRIvuHncofRuXCsQ20A7utZWRuEgA2bvj4nQQjek",  # a Google Sheet
 }
+
+
 
 """
 --- STREAMLIT RUNTIME SWITCHES ---
@@ -45,61 +47,8 @@ This module reads environment switches that help your app distinguish between ru
 """
 
 
-def set_env_vars():
-    """
-    THIS IS THE LEGACY FUNCTION
-    Loads environment variables and/or secrets into environmental variables for runtime.
-    THis app does not rely on passing variables as secrets at runtime
-    Always attempts to load the .env file first to capture overrides like RUN_CONTEXT.
-    """
-    
-    # Get env file if it exists
-    ENV_FILE = "/Users/drew_wilkins/Drews_Files/Drew/Python/Localcode/.env"
-    if os.path.exists(ENV_FILE):
-        load_dotenv(dotenv_path=ENV_FILE)
-        logging.info("Loaded local .env file from %s", ENV_FILE)
-    else:
-        logging.info("No local .env file found at %s, assuming Streamlit Cloud", ENV_FILE)
-
-    # Set context values by reading values from env or else setting defaults that assume Streamlit
-    run_context = os.getenv("RUN_CONTEXT", "streamlit").lower()
-    force_user_auth = os.getenv("FORCE_USER_AUTH", "true").lower() == "true"
-
-    logging.info("Running in context: %s", run_context.upper())
-    logging.info("Force user authentication: %s", force_user_auth)
-
-
-    # If context is set to Streamlit, stores Streamlit secrets into os.environ. Yes, it will do this on every reload, but it's very quick
-    if run_context == "streamlit":
-        # First remove eixsting keys from os.environ that came from .env, if present
-        # We will re establish the context values again below
-        env_keys = dotenv_values(ENV_FILE).keys()
-        for key in env_keys:
-            os.environ.pop(key, None)
-        # Store Streamlit secrets into os.environ
-        try:
-            import streamlit as st
-            for key, value in st.secrets.items():
-                if isinstance(value, dict):
-                    os.environ[key.upper() + "_JSON_STRING"] = json.dumps(value)
-                    logging.warning("Dicts found and converted to JSON strings")
-                else:
-                    os.environ[key] = str(value)
-        except Exception as e:
-            logging.warning("Failed to load Streamlit secrets: %s", e)
-
-    # Store the balance of values into os.environ explicitly, regardless of streamlit context
-    for key, value in GCP_CONFIG.items():
-        os.environ[key] = value
-    os.environ["RUN_CONTEXT"] = run_context
-    os.environ["FORCE_USER_AUTH"] = str(force_user_auth).lower()
-    os.environ["QDRANT_PATH"] = "/Users/drew_wilkins/Drews_Files/Drew/Python/Localcode/Drews_Tools/qdrant_ASK_lib_tools/qdrant_db"
-
-
-
 def env_config():
     """
-    THIS IS THE NEW FUNCTION
     Respects RUN_CONTEXT and FORCE_USER_AUTH from .env.
     Loads app config from .env and/or Streamlit secrets.
     Returns a normalized config dictionary.
@@ -115,18 +64,20 @@ def env_config():
     config = {}
 
     # Load .env if present
-    ENV_FILE = "/Users/drew_wilkins/Drews_Files/Drew/Python/Localcode/.env"
+    ENV_FILE = os.getenv("ENV_FILE", str(Path(__file__).resolve().parent.parent / ".env"))
     if os.path.exists(ENV_FILE):
         load_dotenv(ENV_FILE)
-        logging.info("Found a local .env file at %s", ENV_FILE)
+        logging.info("Loaded .env from %s", ENV_FILE)
+    else:
+        logging.info("No .env file found at %s", ENV_FILE)
 
     # Read declared context (don't assume based on .env presence)
     run_context = os.getenv("RUN_CONTEXT", "streamlit").lower()
     force_user_auth = os.getenv("FORCE_USER_AUTH", "true").lower() == "true"
 
     # Start loading variables into config dict
-    config["run_context"] = run_context
-    config["force_user_auth"] = force_user_auth
+    config["RUN_CONTEXT"] = run_context
+    config["FORCE_USER_AUTH"] = force_user_auth
     logging.info("Running in context: %s", run_context.upper())
     logging.info("Force user authentication: %s", force_user_auth)
 
