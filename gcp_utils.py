@@ -170,6 +170,13 @@ def fetch_sheet(sheets_client: SheetsClient, spreadsheet_id: str) -> Worksheet |
             logging.error("[fetch_sheet] Could not read worksheet %s values: %s", spreadsheet_id, inner)
             return None
         logging.info(sheet.title)
+        try:
+            if not sheet.get_all_values():
+                logging.error("Worksheet %s is empty.", spreadsheet_id)
+                return None
+        except Exception as inner:
+            logging.error("[fetch_sheet] Could not read worksheet %s values: %s", spreadsheet_id, inner)
+            return None
         return sheet
     except Exception as e:
         logging.error("[fetch_sheet] Failed to fetch worksheet: %s", e)
