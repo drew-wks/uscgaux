@@ -22,8 +22,6 @@ from library_utils import compute_pdf_id, find_duplicates_against_reference, val
 from gcp_utils import upload_pdf, fetch_sheet_as_df
 from log_writer import log_event
 
-from env_config import env_config
-
 config = env_config()
 
 @runtime_checkable

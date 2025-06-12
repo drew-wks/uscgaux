@@ -221,7 +221,7 @@ def get_all_pdf_ids_in_qdrant(client: QdrantClient, collection_name: str) -> Lis
 
             if not isinstance(payload, dict):
                 logging.warning("🚫 Payload at index %s is not a dict: %s", idx, payload)
-                print(f"⚠️ Malformed payload: {payload}")
+                logging.warning(f"⚠️ Malformed payload: {payload}")
                 continue
 
             metadata = payload.get("metadata")

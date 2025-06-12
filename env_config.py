@@ -1,5 +1,4 @@
 import os, logging, json
-from pathlib import Path
 from dotenv import load_dotenv, dotenv_values
 
 
@@ -54,13 +53,13 @@ def set_env_vars():
     Always attempts to load the .env file first to capture overrides like RUN_CONTEXT.
     """
     
-    # Determine path to .env file via ENV_FILE variable or relative fallback
-    env_file = os.getenv("ENV_FILE", str(Path(__file__).resolve().parent / ".env"))
-    if os.path.exists(env_file):
-        load_dotenv(dotenv_path=env_file)
-        logging.info("Loaded local .env file from %s", env_file)
+    # Get env file if it exists
+    ENV_FILE = "/Users/drew_wilkins/Drews_Files/Drew/Python/Localcode/.env"
+    if os.path.exists(ENV_FILE):
+        load_dotenv(dotenv_path=ENV_FILE)
+        logging.info("Loaded local .env file from %s", ENV_FILE)
     else:
-        logging.info("No .env file found at %s", env_file)
+        logging.info("No local .env file found at %s, assuming Streamlit Cloud", ENV_FILE)
 
     # Set context values by reading values from env or else setting defaults that assume Streamlit
     run_context = os.getenv("RUN_CONTEXT", "streamlit").lower()
@@ -74,7 +73,7 @@ def set_env_vars():
     if run_context == "streamlit":
         # First remove eixsting keys from os.environ that came from .env, if present
         # We will re establish the context values again below
-        env_keys = dotenv_values(env_file).keys()
+        env_keys = dotenv_values(ENV_FILE).keys()
         for key in env_keys:
             os.environ.pop(key, None)
         # Store Streamlit secrets into os.environ
@@ -116,12 +115,10 @@ def env_config():
     config = {}
 
     # Load .env if present
-    env_file = os.getenv("ENV_FILE", str(Path(__file__).resolve().parent / ".env"))
-    if os.path.exists(env_file):
-        load_dotenv(env_file)
-        logging.info("Found a local .env file at %s", env_file)
-    else:
-        logging.info("No .env file found at %s", env_file)
+    ENV_FILE = "/Users/drew_wilkins/Drews_Files/Drew/Python/Localcode/.env"
+    if os.path.exists(ENV_FILE):
+        load_dotenv(ENV_FILE)
+        logging.info("Found a local .env file at %s", ENV_FILE)
 
     # Read declared context (don't assume based on .env presence)
     run_context = os.getenv("RUN_CONTEXT", "streamlit").lower()
@@ -148,11 +145,11 @@ def env_config():
             logging.warning("Failed to load Streamlit secrets: %s", e)
     # Otherwise CLI/test mode — bring in all extra .env values
     else:
-        if os.path.exists(env_file):
-            for key, value in dotenv_values(env_file).items():
+        if os.path.exists(ENV_FILE):
+            for key, value in dotenv_values(ENV_FILE).items():
                 if key not in config:
                     config[key] = value
-            logging.info("Set balance of env values from .env file at %s", env_file)
+            logging.info("Set balance of env values from.env file at %s", ENV_FILE)
    
     return config
 

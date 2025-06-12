@@ -7,7 +7,6 @@ from qdrant_client import QdrantClient
 from env_config import rag_config
 from gcp_utils import list_pdfs_in_folder, fetch_sheet, fetch_sheet_as_df
 from qdrant_utils import get_all_pdf_ids_in_qdrant, get_summaries_by_pdf_id
-from IPython.display import display, HTML
 
 from env_config import env_config
 
