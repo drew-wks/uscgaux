@@ -160,6 +160,13 @@ def fetch_sheet(sheets_client: SheetsClient, spreadsheet_id: str) -> Worksheet |
     try:
         sheet = sheets_client.open_by_key(spreadsheet_id).sheet1
         logging.info(sheet.title)
+        try:
+            if not sheet.get_all_values():
+                logging.error("Worksheet %s is empty.", spreadsheet_id)
+                return None
+        except Exception as inner:
+            logging.error("[fetch_sheet] Could not read worksheet %s values: %s", spreadsheet_id, inner)
+            return None
         return sheet
     except Exception as e:
         logging.error("[fetch_sheet] Failed to fetch worksheet: %s", e)
@@ -181,7 +188,6 @@ def fetch_sheet_as_df(sheets_client: SheetsClient, spreadsheet_id: str) -> pd.Da
     try:
         sheet = fetch_sheet(sheets_client, spreadsheet_id)
         if sheet is None:
-            logging.error("Worksheet %s is empty.", spreadsheet_id)
             return pd.DataFrame()
 
         df: pd.DataFrame = get_as_dataframe(sheet, evaluate_formulas=True, dtype=str)
