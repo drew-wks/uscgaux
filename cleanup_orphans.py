@@ -1,14 +1,13 @@
-import pandas as pd
 import logging
 from typing import Tuple
+import pandas as pd
 from gspread.client import Client as SheetsClient
 from googleapiclient.discovery import Resource as DriveClient
 from qdrant_client import QdrantClient
-from env_config import rag_config
+from env_config import rag_config, env_config
 from gcp_utils import list_pdfs_in_folder, fetch_sheet, fetch_sheet_as_df
 from qdrant_utils import get_all_pdf_ids_in_qdrant, get_summaries_by_pdf_id
 
-from env_config import env_config
 
 config = env_config()
 
@@ -81,7 +80,7 @@ def find_rows_missing_google_ids(sheets_client: SheetsClient, df: pd.DataFrame, 
 
     if orphan_rows.empty:
         logging.info("✅ No orphan rows found in LIBRARY_UNIFIED.")
-        return orphan_rows, []
+        return pd.DataFrame(columns=df.columns), []
 
     sheet = fetch_sheet(sheets_client, config["LIBRARY_UNIFIED"])
     log_entries = flag_rows_as_orphans(sheet, df, orphan_rows)

@@ -334,8 +334,8 @@ def get_summaries_by_pdf_id(client: QdrantClient, collection_name: str, pdf_ids:
 
 def delete_records_by_pdf_id(
     client: QdrantClient,
-    pdf_ids: Union[List[str], pd.Series],
     collection_name: str,
+    pdf_ids: Union[List[str], pd.Series],
     log_event_fn=None
 ) -> None:
     """
@@ -343,8 +343,8 @@ def delete_records_by_pdf_id(
 
     Args:
         client (QdrantClient): An initialized Qdrant client.
-        pdf_ids (List[str] or pd.Series): Unique PDF IDs to delete.
         collection_name (str): Name of the Qdrant collection.
+        pdf_ids (List[str] or pd.Series): Unique PDF IDs to delete.
         log_event_fn (callable, optional): Function to log deletion events externally.
     """
     if collection_name is None:

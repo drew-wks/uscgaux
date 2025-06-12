@@ -5,7 +5,7 @@ from googleapiclient.discovery import Resource as DriveClient
 from qdrant_client import QdrantClient
 from env_config import env_config, rag_config, RAG_CONFIG
 from gcp_utils import move_pdf, fetch_sheet_as_df, fetch_sheet
-from library_utils import validate_core_metadata_format, find_duplicates_against_reference, validate_all_rows_format
+from library_utils import find_duplicates_against_reference, validate_all_rows_format
 from qdrant_utils import in_qdrant
 from langchain_utils import init_vectorstore, pdf_to_Docs_via_Drive, chunk_Docs
 from log_writer import log_event
@@ -14,6 +14,29 @@ from log_writer import log_event
 config = env_config()
 
 def upsert_single_file(drive_client: DriveClient, sheets_client: SheetsClient, qdrant_client: QdrantClient, row, idx):
+    """
+    Process and upsert a single document row into the vector database and update the associated metadata.
+
+    This function performs the following steps:
+    - Checks if the given `pdf_id` already exists in Qdrant and skips it if so.
+    - Downloads the corresponding PDF from Google Drive.
+    - Extracts and chunks the document content for embedding.
+    - Uploads the document chunks to Qdrant.
+    - Moves the PDF file to the LIVE folder in Drive.
+    - Updates the row's status in the spreadsheet and logs the event.
+
+    Args:
+        drive_client (DriveClient): Authenticated Google Drive client.
+        sheets_client (SheetsClient): Authenticated Google Sheets client.
+        qdrant_client (QdrantClient): Qdrant client for vector operations.
+        row (pd.Series): A row from the LIBRARY_UNIFIED dataframe representing the document metadata.
+        idx (int): Index of the row in the spreadsheet (used for updating the correct cell range).
+
+    Returns:
+        Tuple[str, str]: A tuple containing:
+            - status string: "uploaded", "rejected", or "failed"
+            - pdf_id (str): Identifier of the processed document
+    """
     pdf_id = str(row.get("pdf_id", ""))
     filename = str(row.get("pdf_file_name", ""))
     file_id = str(row.get("google_id", ""))
@@ -40,14 +63,34 @@ def upsert_single_file(drive_client: DriveClient, sheets_client: SheetsClient, q
     # Change status in LIBRARY_UNIFIED → live
     row["status"] = "live"
     row["status_timestamp"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    # Set the upsert date in LIBRARY_UNIFIED
+    row['upsert_date'] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    logging.info("Set status to live and status_timestamp, upsert_date to  for pdf_id: %s", pdf_id)
     sheet = fetch_sheet(sheets_client, config["LIBRARY_UNIFIED"])
     sheet.update(f"A{idx+2}", [row.tolist()])
 
     log_event(sheets_client, "promoted_to_live", pdf_id, filename)
     return "uploaded", pdf_id
 
+
+
 def promote_files(drive_client: DriveClient, sheets_client: SheetsClient, qdrant_client: QdrantClient):
-    
+    """
+    Validates and prepares rows from the LIBRARY_UNIFIED Google Sheet for promotion.
+
+    This function retrieves all rows from the LIBRARY_UNIFIED sheet, validates their
+    format, and halts execution if any invalid rows are found. It is intended to be 
+    the first step in a larger workflow that promotes validated documents to Qdrant 
+    and updates Google Drive metadata accordingly.
+
+    Args:
+        drive_client (DriveClient): An authenticated Google Drive client.
+        sheets_client (SheetsClient): An authenticated Google Sheets client.
+        qdrant_client (QdrantClient): An initialized Qdrant vector store client.
+
+    Returns:
+        None. The function exits early if validation fails.
+    """
     # VALIDATE all rows
     library_df = fetch_sheet_as_df(sheets_client, config["LIBRARY_UNIFIED"])
     valid_df, invalid_df, log_df = validate_all_rows_format(library_df)
