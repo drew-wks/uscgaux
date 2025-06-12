@@ -78,8 +78,8 @@ def env_config():
     # Start loading variables into config dict
     config["RUN_CONTEXT"] = run_context
     config["FORCE_USER_AUTH"] = force_user_auth
-    logging.info("Running in context: %s", run_context.upper())
-    logging.info("Force user authentication: %s", force_user_auth)
+    logging.info("Running in context: %s", config["RUN_CONTEXT"])
+    logging.info("Force user authentication: %s", config["FORCE_USER_AUTH"])
 
     config.update(GCP_CONFIG)
     config["QDRANT_PATH"] = "/Users/drew_wilkins/Drews_Files/Drew/Python/Localcode/Drews_Tools/qdrant_ASK_lib_tools/qdrant_db"
@@ -89,7 +89,7 @@ def env_config():
         try:
             import streamlit as st
             for key, value in st.secrets.items():
-                config[key.lower()] = value  # Lowercase for consistency
+                config[key] = value  # Lowercase for consistency
             logging.info("Set balance of env values from Streamlit secrets")
         except Exception as e:
             config["streamlit_error"] = str(e)

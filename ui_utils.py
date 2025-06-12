@@ -25,7 +25,7 @@ def init_auth():
     #   Google policy is OAuth clients that have remained inactive for six months will be automatically deleted. Inactivity is 
     #   determined based on the absence of token exchanges or client updates.
     
-    if config["FORCE_USER_AUTH"] == "false":
+    if config["FORCE_USER_AUTH"] is False:
         return  # Skip auth when testing locally. Run & Debug launch.json is set to look for this switch
     
     credentials_conf = {
