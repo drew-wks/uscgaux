@@ -5,7 +5,6 @@ import json
 from io import BytesIO
 import pandas as pd
 import gspread
-from gspread_dataframe import get_as_dataframe
 from gspread.client import Client as SheetsClient
 from gspread.worksheet import Worksheet
 from google.oauth2.service_account import Credentials
@@ -47,7 +46,9 @@ def init_drive_client(creds: Credentials) -> DriveClient:
         DriveClient: An authorized client for the Google Drive API.
     """
     scoped_creds = creds.with_scopes(["https://www.googleapis.com/auth/drive"])
-    return build("drive", "v3", credentials=scoped_creds)
+    client = build("drive", "v3", credentials=scoped_creds)
+    logging.info("✅ Google Drive client initialized successfully with scoped credentials.")
+    return client
 
 
 def init_sheets_client(creds: Credentials) -> SheetsClient:
@@ -67,7 +68,9 @@ def init_sheets_client(creds: Credentials) -> SheetsClient:
         "https://spreadsheets.google.com/feeds",
         "https://www.googleapis.com/auth/drive",
     ])
-    return gspread.authorize(scoped_creds)
+    client = gspread.authorize(scoped_creds)
+    logging.info("✅ Google Sheets client initialized successfully with scoped credentials.")
+    return client
 
 
 def get_folder_name(drive_client: DriveClient, file_id: str) -> str:
@@ -159,6 +162,13 @@ def fetch_sheet(sheets_client: SheetsClient, spreadsheet_id: str) -> Worksheet |
     """
     try:
         sheet = sheets_client.open_by_key(spreadsheet_id).sheet1
+        try:
+            if not sheet.get_all_values():
+                logging.error("Worksheet %s is empty.", spreadsheet_id)
+                return None
+        except Exception as inner:
+            logging.error("[fetch_sheet] Could not read worksheet %s values: %s", spreadsheet_id, inner)
+            return None
         logging.info(sheet.title)
         return sheet
     except Exception as e:
@@ -166,9 +176,12 @@ def fetch_sheet(sheets_client: SheetsClient, spreadsheet_id: str) -> Worksheet |
         return None
     
 
+
 def fetch_sheet_as_df(sheets_client: SheetsClient, spreadsheet_id: str) -> pd.DataFrame:
     """
-    Fetches the first worksheet from a Google Sheet by ID and returns its contents as a DataFrame with all fields forced to string. Booleans can get converted later if needed.
+    Fetches the first worksheet from a Google Sheet by ID and returns its contents as a DataFrame
+    with all fields coerced to strings. Handles blank columns, empty rows, and sheet edge cases
+    more reliably than `get_as_dataframe`. Don't use gspread; it's problematic.
 
     Args:
         sheets_client (SheetsClient): An authenticated gspread client.
@@ -176,20 +189,31 @@ def fetch_sheet_as_df(sheets_client: SheetsClient, spreadsheet_id: str) -> pd.Da
 
     Returns:
         pd.DataFrame: DataFrame containing the worksheet data.
-        Returns empty DataFrame on failure.
+                      Returns empty DataFrame on failure or if no data rows exist.
     """
     try:
         sheet = fetch_sheet(sheets_client, spreadsheet_id)
         if sheet is None:
-            logging.error("Worksheet %s is empty.", spreadsheet_id)
+            logging.error("❌ Worksheet %s could not be fetched.", spreadsheet_id)
             return pd.DataFrame()
 
-        df: pd.DataFrame = get_as_dataframe(sheet, evaluate_formulas=True, dtype=str)
-        df = df.fillna("")  # Prevents NaN values
+        raw_data = sheet.get_all_values()
+        if not raw_data or len(raw_data) < 2:
+            logging.warning("⚠️ Worksheet %s has no data rows.", spreadsheet_id)
+            return pd.DataFrame(columns=raw_data[0] if raw_data else [])
+
+        headers = raw_data[0]
+        rows = raw_data[1:]
+
+        df = pd.DataFrame(rows, columns=headers)
+        df = df.loc[:, [col.strip() != "" for col in df.columns]]
+        df = df.fillna("").astype(str)
+
+        logging.info("✅ Fetched and converted worksheet %s with %d rows.", spreadsheet_id, len(df))
         return df
 
     except Exception as e:
-        logging.error("[fetch_sheet_as_df] Failed to convert worksheet to DataFrame: %s", e)
+        logging.error("🚨 [fetch_sheet_as_df] Failed to convert worksheet to DataFrame: %s", e)
         return pd.DataFrame()
 
     
