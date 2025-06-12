@@ -1,4 +1,3 @@
-import os
 from datetime import datetime, timezone
 import logging
 from gspread.client import Client as SheetsClient

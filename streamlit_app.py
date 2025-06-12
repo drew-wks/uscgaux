@@ -13,7 +13,7 @@ from propose_new_files import propose_new_files, FileLike
 from cleanup_orphans import find_orphans
 from promote_files import promote_files
 from delete_tagged import delete_tagged
-from ui_utils import init_auth, apply_styles, init_cached_clients, get_library_catalog_excel_and_date
+from ui_utils import init_auth, apply_styles, get_library_catalog_excel_and_date
 
 
 config = env_config()

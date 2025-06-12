@@ -1,16 +1,4 @@
 
-"""
-Agent: archive_live.py
-
-Archives rows with status = 'live_for_deletion':
-- Moves PDF from PDF_LIVE to PDF_ARCHIVE
-- Removes associated records from Qdrant
-- Copies row from LIBRARY_UNIFIED to LIBRARY_ARCHIVE
-- Removes row from LIBRARY_UNIFIED
-- Logs all actions
-"""
-
-import os
 import logging
 from datetime import datetime, timezone
 import pandas as pd
