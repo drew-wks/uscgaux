@@ -4,14 +4,13 @@ import logging
 from gspread.client import Client as SheetsClient
 from googleapiclient.discovery import Resource as DriveClient
 from qdrant_client import QdrantClient
-from env_config import rag_config, RAG_CONFIG
+from env_config import env_config, rag_config, RAG_CONFIG
 from gcp_utils import move_pdf, fetch_sheet_as_df, fetch_sheet
 from library_utils import validate_core_metadata_format, find_duplicates_against_reference, validate_all_rows_format
 from qdrant_utils import in_qdrant
 from langchain_utils import init_vectorstore, pdf_to_Docs_via_Drive, chunk_Docs
 from log_writer import log_event
 
-from env_config import env_config
 
 config = env_config()
 

@@ -17,6 +17,7 @@ import pandas as pd
 from typing import List, Protocol, runtime_checkable
 from gspread.client import Client as SheetsClient
 from googleapiclient.discovery import Resource as DriveClient
+from env_config import env_config
 from library_utils import compute_pdf_id, find_duplicates_against_reference, validate_core_metadata_format, append_new_rows
 from gcp_utils import upload_pdf, fetch_sheet_as_df
 from log_writer import log_event

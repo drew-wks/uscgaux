@@ -17,13 +17,13 @@ import pandas as pd
 from gspread.client import Client as SheetsClient
 from googleapiclient.discovery import Resource as DriveClient
 from qdrant_client import QdrantClient
-from env_config import rag_config
+from env_config import rag_config, env_config
 from gcp_utils import get_folder_name, move_pdf, fetch_sheet_as_df
 from qdrant_utils import delete_records_by_pdf_id
 from library_utils import fetch_rows_by_status, remove_rows, append_new_rows
 from log_writer import log_event
 
-
+config = env_config()
 
 def archive_tagged(
     drive_client: DriveClient,
