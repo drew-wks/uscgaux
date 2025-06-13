@@ -383,7 +383,7 @@ def delete_records_by_pdf_id(
 
 
 
-def get_file_ids_by_pdf_id(client: QdrantClient, collection_name: str, pdf_ids: List[str]) -> pd.DataFrame:
+def get_gcp_file_ids_by_pdf_id(client: QdrantClient, collection_name: str, pdf_ids: List[str]) -> pd.DataFrame:
     """Return all unique gcp_file_id values for each pdf_id."""
     if not pdf_ids:
         return pd.DataFrame(columns=["pdf_id", "gcp_file_ids", "unique_file_count"])

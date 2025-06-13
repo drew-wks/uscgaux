@@ -205,9 +205,18 @@ def fetch_sheet_as_df(sheets_client: SheetsClient, spreadsheet_id: str) -> pd.Da
             logging.error("❌ Worksheet %s could not be fetched.", spreadsheet_id)
             return pd.DataFrame()
 
-        df = get_as_dataframe(sheet, evaluate_formulas=True, dtype=str)
-        if df is None:
-            return pd.DataFrame()
+        raw_data = sheet.get_all_values()
+        if not raw_data or len(raw_data) < 2:
+            logging.warning("⚠️ Worksheet %s has no data rows.", spreadsheet_id)
+            return pd.DataFrame(columns=raw_data[0] if raw_data else [])
+
+        headers = raw_data[0]
+        rows = raw_data[1:]
+
+        df = pd.DataFrame(rows, columns=headers)
+        df = df.loc[:, [col.strip() != "" for col in df.columns]]
+        df = df.fillna("").astype(str)
+
 
         logging.info("✅ Fetched and converted worksheet %s with %d rows.", spreadsheet_id, len(df))
         return df
