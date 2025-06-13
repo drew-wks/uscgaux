@@ -383,6 +383,49 @@ def delete_records_by_pdf_id(
 
 
 
+def get_file_ids_by_pdf_id(client: QdrantClient, collection_name: str, pdf_ids: List[str]) -> pd.DataFrame:
+    """Return all unique gcp_file_id values for each pdf_id."""
+    if not pdf_ids:
+        return pd.DataFrame(columns=["pdf_id", "gcp_file_ids", "unique_file_count"])
+
+    file_map: dict[str, set[str]] = {}
+    filter_condition = models.Filter(
+        must=[models.FieldCondition(key="metadata.pdf_id", match=models.MatchAny(any=pdf_ids))]
+    )
+    scroll_offset = None
+    while True:
+        results, scroll_offset = client.scroll(
+            collection_name=collection_name,
+            scroll_filter=filter_condition,
+            with_payload=True,
+            with_vectors=False,
+            limit=100000,
+            offset=scroll_offset,
+        )
+        for rec in results:
+            payload = rec.payload
+            if not isinstance(payload, dict):
+                continue
+            meta = payload.get("metadata", {})
+            if not isinstance(meta, dict):
+                continue
+            pid = meta.get("pdf_id")
+            if not pid:
+                continue
+            fid = meta.get("gcp_file_id") or meta.get("file_id")
+            file_map.setdefault(str(pid), set())
+            if fid:
+                file_map[str(pid)].add(str(fid))
+        if scroll_offset is None:
+            break
+
+    rows = [
+        {"pdf_id": pid, "gcp_file_ids": sorted(list(fids)), "unique_file_count": len(fids)}
+        for pid, fids in file_map.items()
+    ]
+    return pd.DataFrame(rows)
+
+
 def update_file_id_for_pdf_id(client: QdrantClient, collection_name: str, pdf_id: str, gcp_file_id: str) -> bool:
     """Update metadata.gcp_file_id for all points matching pdf_id."""
     try:

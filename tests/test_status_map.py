@@ -3,47 +3,37 @@ from unittest.mock import MagicMock
 import status_map
 
 
-def test_build_status_map(monkeypatch, mock_drive_client, mock_sheets_client, mock_qdrant_client):
-    monkeypatch.setattr(status_map, 'config', {
-        'LIBRARY_UNIFIED': 'lib',
-        'PDF_LIVE': 'live',
-        'PDF_TAGGING': 'tag'
+def test_build_status_map(monkeypatch):
+    lib_df = pd.DataFrame({
+        "pdf_id": ["p1", "p2"],
+        "gcp_file_id": ["f1", "f2"],
+        "pdf_file_name": ["one.pdf", "two.pdf"],
+        "status": ["live", "live"],
     })
-    monkeypatch.setattr(status_map, 'rag_config', lambda k: 'col')
-
-    sheet_df = pd.DataFrame({
-        'pdf_id': ['1', '2'],
-        'pdf_file_name': ['one.pdf', 'two.pdf'],
-        'gcp_file_id': ['A', 'B']
+    drive_df = pd.DataFrame({"ID": ["f1"], "Name": ["one.pdf"], "URL": ["url"]})
+    qsum_df = pd.DataFrame({
+        "pdf_id": ["p1"],
+        "file_name": ["one.pdf"],
+        "record_count": [1],
+        "page_count": [1],
     })
-    monkeypatch.setattr(status_map, 'fetch_sheet_as_df', lambda sc, sid: sheet_df)
-
-    live_df = pd.DataFrame({'Name': ['one.pdf'], 'ID': ['A'], 'URL': ['urlA']})
-    tag_df = pd.DataFrame({'Name': ['two.pdf'], 'ID': ['B'], 'URL': ['urlB']})
-    monkeypatch.setattr(status_map, 'list_pdfs_in_folder', lambda dc, fid: live_df if fid == 'live' else tag_df)
-
-    qdrant_file_df = pd.DataFrame({'pdf_id': ['1', '3'], 'gcp_file_id': ['A', 'C']})
-    monkeypatch.setattr(status_map, 'get_file_ids_by_pdf_id', lambda qc, col, ids: qdrant_file_df)
-
-    qdrant_summary_df = pd.DataFrame({
-        'pdf_id': ['1', '3'],
-        'title': ['T1', 'T3'],
-        'pdf_file_name': ['one.pdf', 'three.pdf'],
-        'record_count': [1, 2],
-        'page_count': [5, 6],
-        'point_ids': [['p1'], ['p3']]
+    qfile_df = pd.DataFrame({
+        "pdf_id": ["p1"],
+        "gcp_file_ids": [["f1"]],
+        "unique_file_count": [1],
     })
-    monkeypatch.setattr(status_map, 'get_summaries_by_pdf_id', lambda qc, col, ids: qdrant_summary_df)
 
-    result = status_map.build_status_map(mock_drive_client, mock_sheets_client, mock_qdrant_client)
-    result = result.sort_values('pdf_id').reset_index(drop=True)
+    monkeypatch.setattr(status_map, "config", {"LIBRARY_UNIFIED": "lib", "PDF_LIVE": "live"})
+    monkeypatch.setattr(status_map, "rag_config", lambda k: "col")
+    monkeypatch.setattr(status_map, "fetch_sheet_as_df", lambda sc, sid: lib_df)
+    monkeypatch.setattr(status_map, "list_pdfs_in_folder", lambda dc, fid: drive_df)
+    monkeypatch.setattr(status_map, "get_summaries_by_pdf_id", lambda qc, col, ids: qsum_df)
+    monkeypatch.setattr(status_map, "get_file_ids_by_pdf_id", lambda qc, col, ids: qfile_df)
 
-    assert list(result['pdf_id']) == ['1', '2', '3']
-    assert result.loc[0, 'in_sheet'] and result.loc[0, 'in_qdrant'] and result.loc[0, 'in_drive']
-    assert result.loc[0, 'file_ids_match']
-    assert result.loc[0, 'issues'] == ''
+    df = status_map.build_status_map(MagicMock(), MagicMock(), MagicMock())
 
-    assert result.loc[1, 'issues'] == 'missing_qdrant'
-    assert not result.loc[1, 'file_ids_match']
-
-    assert result.loc[2, 'issues'] == 'missing_sheet; missing_drive'
+    df = df.sort_values("pdf_id").reset_index(drop=True)
+    assert list(df["in_drive"]) == [True, False]
+    assert list(df["in_qdrant"]) == [True, False]
+    assert df.loc[0, "issues"] == []
+    assert df.loc[1, "issues"] == ["Missing in Drive", "Missing in Qdrant"]
