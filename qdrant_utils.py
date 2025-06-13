@@ -5,6 +5,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import exceptions as qdrant_exceptions
 from qdrant_client import models
 from env_config import env_config, RAG_CONFIG
+from gcp_utils import fetch_sheet_as_df
 
 config = env_config()
 
@@ -379,4 +380,90 @@ def delete_records_by_pdf_id(
                 qdrant_exceptions.ResponseHandlingException,
                 TypeError, ValueError):
             logging.exception("❌ Failed to delete records for pdf_id %s", pdf_id)
+
+
+def get_file_ids_by_pdf_id(client: QdrantClient, collection_name: str, pdf_ids: List[str]) -> pd.DataFrame:
+    """Return all unique gcp_file_id values for each pdf_id."""
+    if not pdf_ids:
+        return pd.DataFrame(columns=["pdf_id", "gcp_file_ids", "unique_file_count"])
+
+    file_map: dict[str, set[str]] = {}
+    filter_condition = models.Filter(
+        must=[models.FieldCondition(key="metadata.pdf_id", match=models.MatchAny(any=pdf_ids))]
+    )
+    scroll_offset = None
+    while True:
+        results, scroll_offset = client.scroll(
+            collection_name=collection_name,
+            scroll_filter=filter_condition,
+            with_payload=True,
+            with_vectors=False,
+            limit=100000,
+            offset=scroll_offset,
+        )
+        for rec in results:
+            payload = rec.payload
+            if not isinstance(payload, dict):
+                continue
+            meta = payload.get("metadata", {})
+            if not isinstance(meta, dict):
+                continue
+            pid = meta.get("pdf_id")
+            if not pid:
+                continue
+            fid = meta.get("gcp_file_id") or meta.get("file_id")
+            file_map.setdefault(str(pid), set())
+            if fid:
+                file_map[str(pid)].add(str(fid))
+        if scroll_offset is None:
+            break
+
+    rows = [
+        {"pdf_id": pid, "gcp_file_ids": sorted(list(fids)), "unique_file_count": len(fids)}
+        for pid, fids in file_map.items()
+    ]
+    return pd.DataFrame(rows)
+
+
+
+def update_file_id_for_pdf_id(client: QdrantClient, collection_name: str, pdf_id: str, gcp_file_id: str) -> bool:
+    """Update metadata.gcp_file_id for all points matching pdf_id."""
+    try:
+        filter_condition = models.Filter(
+            must=[
+                models.FieldCondition(
+                    key="metadata.pdf_id",
+                    match=models.MatchValue(value=pdf_id)
+                )
+            ]
+        )
+        client.set_payload(
+            collection_name=collection_name,
+            payload={"gcp_file_id": gcp_file_id},
+            points=filter_condition,
+            key="metadata"
+        )
+        logging.info("Updated gcp_file_id for pdf_id %s to %s", pdf_id, gcp_file_id)
+        return True
+    except Exception:
+        logging.exception("Failed to update gcp_file_id for pdf_id %s", pdf_id)
+        return False
+
+
+def update_qdrant_file_ids_for_live_rows(qdrant_client: QdrantClient, sheets_client, collection_name: str | None = None) -> pd.DataFrame:
+    """Sync gcp_file_id into Qdrant for every live row in LIBRARY_UNIFIED."""
+    collection = collection_name or RAG_CONFIG.get("qdrant_collection_name")
+    library_df = fetch_sheet_as_df(sheets_client, config["LIBRARY_UNIFIED"])
+    if library_df.empty or "status" not in library_df.columns:
+        return pd.DataFrame()
+    live_df = library_df[library_df["status"] == "live"]
+    results = []
+    for _, row in live_df.iterrows():
+        pdf_id = str(row.get("pdf_id", ""))
+        file_id = str(row.get("gcp_file_id", ""))
+        if not pdf_id or not file_id:
+            continue
+        success = update_file_id_for_pdf_id(qdrant_client, collection, pdf_id, file_id)
+        results.append({"pdf_id": pdf_id, "gcp_file_id": file_id, "updated": success})
+    return pd.DataFrame(results)
 
