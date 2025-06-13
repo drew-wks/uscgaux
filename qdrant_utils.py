@@ -380,3 +380,77 @@ def delete_records_by_pdf_id(
                 TypeError, ValueError):
             logging.exception("❌ Failed to delete records for pdf_id %s", pdf_id)
 
+
+def get_file_ids_by_pdf_id(client: QdrantClient, collection_name: str, pdf_ids: List[str]) -> pd.DataFrame:
+    """
+    Retrieve all unique file_ids for each supplied pdf_id from the Qdrant collection.
+
+    Args:
+        client: Qdrant client instance.
+        collection_name: Name of the Qdrant collection.
+        pdf_ids: List of pdf_id values to look up.
+
+    Returns:
+        pd.DataFrame: DataFrame with columns ``pdf_id``, ``file_ids`` (list of unique
+        file_ids) and ``unique_file_count`` (number of unique file_ids).
+    """
+    if not pdf_ids:
+        return pd.DataFrame(columns=["pdf_id", "file_ids", "unique_file_count"])
+
+    results = []
+    for pdf_id in pdf_ids:
+        file_ids: List[str] = []
+        scroll_offset = None
+        try:
+            while True:
+                records, scroll_offset = client.scroll(
+                    collection_name=collection_name,
+                    scroll_filter=models.Filter(
+                        must=[
+                            models.FieldCondition(
+                                key="metadata.pdf_id",
+                                match=models.MatchText(text=pdf_id),
+                            )
+                        ]
+                    ),
+                    with_payload=True,
+                    with_vectors=False,
+                    limit=100000,
+                    offset=scroll_offset,
+                )
+
+                for record in records:
+                    payload = record.payload
+                    if not isinstance(payload, dict):
+                        logging.warning("🚫 Skipping record with non-dict payload: %s", payload)
+                        continue
+                    metadata = payload.get("metadata")
+                    if not isinstance(metadata, dict):
+                        logging.warning("🚫 Skipping record with malformed metadata: %s", payload)
+                        continue
+                    file_id = metadata.get("file_id")
+                    if file_id:
+                        file_ids.append(str(file_id))
+
+                if scroll_offset is None:
+                    break
+        except (
+            qdrant_exceptions.UnexpectedResponse,
+            qdrant_exceptions.ResponseHandlingException,
+            TypeError,
+            ValueError,
+        ):
+            logging.exception(
+                "Error retrieving file_ids for pdf_id %s from Qdrant", pdf_id
+            )
+
+        unique_ids = list(set(file_ids))
+        results.append(
+            {
+                "pdf_id": pdf_id,
+                "file_ids": unique_ids,
+                "unique_file_count": len(unique_ids),
+            }
+        )
+
+    return pd.DataFrame(results)

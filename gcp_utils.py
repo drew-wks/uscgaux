@@ -223,7 +223,7 @@ def fetch_sheet_as_df(sheets_client: SheetsClient, spreadsheet_id: str) -> pd.Da
         logging.error("🚨 [fetch_sheet_as_df] Failed to convert worksheet to DataFrame: %s", e)
         return pd.DataFrame()
 
-    
+
 
 def upload_pdf(drive_client: DriveClient, file_obj, file_name: str, folder_id: str) -> None:
     """

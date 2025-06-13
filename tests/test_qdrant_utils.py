@@ -44,3 +44,25 @@ def test_delete_records_by_pdf_id(mock_qdrant_client):
     mock_qdrant_client.delete.return_value = result
     qdrant_utils.delete_records_by_pdf_id(mock_qdrant_client, ['a'], 'col')
     assert mock_qdrant_client.delete.called
+
+def test_get_file_ids_by_pdf_id_multiple(mock_qdrant_client):
+    rec1 = MagicMock()
+    rec1.payload = {"metadata": {"pdf_id": "p1", "file_id": "f1"}}
+    rec2 = MagicMock()
+    rec2.payload = {"metadata": {"pdf_id": "p1", "file_id": "f2"}}
+    rec3 = MagicMock()
+    rec3.payload = {"metadata": {"pdf_id": "p1", "file_id": "f1"}}
+    rec4 = MagicMock()
+    rec4.payload = {"metadata": {"pdf_id": "p2", "file_id": "f3"}}
+
+    mock_qdrant_client.scroll.side_effect = [([rec1, rec2, rec3], None), ([rec4], None)]
+
+    df = qdrant_utils.get_file_ids_by_pdf_id(mock_qdrant_client, 'col', ['p1', 'p2'])
+
+    row1 = df[df['pdf_id'] == 'p1'].iloc[0]
+    assert set(row1['file_ids']) == {'f1', 'f2'}
+    assert row1['unique_file_count'] == 2
+
+    row2 = df[df['pdf_id'] == 'p2'].iloc[0]
+    assert set(row2['file_ids']) == {'f3'}
+    assert row2['unique_file_count'] == 1
