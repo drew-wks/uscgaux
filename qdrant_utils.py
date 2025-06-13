@@ -5,6 +5,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import exceptions as qdrant_exceptions
 from qdrant_client import models
 from env_config import env_config, RAG_CONFIG
+from gcp_utils import fetch_sheet_as_df
 
 config = env_config()
 
@@ -453,4 +454,46 @@ def get_file_ids_by_pdf_id(client: QdrantClient, collection_name: str, pdf_ids: 
             }
         )
 
+    return pd.DataFrame(results)
+=======
+
+def update_file_id_for_pdf_id(client: QdrantClient, collection_name: str, pdf_id: str, gcp_file_id: str) -> bool:
+    """Update metadata.gcp_file_id for all points matching pdf_id."""
+    try:
+        filter_condition = models.Filter(
+            must=[
+                models.FieldCondition(
+                    key="metadata.pdf_id",
+                    match=models.MatchValue(value=pdf_id)
+                )
+            ]
+        )
+        client.set_payload(
+            collection_name=collection_name,
+            payload={"gcp_file_id": gcp_file_id},
+            points=filter_condition,
+            key="metadata"
+        )
+        logging.info("Updated gcp_file_id for pdf_id %s to %s", pdf_id, gcp_file_id)
+        return True
+    except Exception:
+        logging.exception("Failed to update gcp_file_id for pdf_id %s", pdf_id)
+        return False
+
+
+def update_qdrant_file_ids_for_live_rows(qdrant_client: QdrantClient, sheets_client, collection_name: str | None = None) -> pd.DataFrame:
+    """Sync gcp_file_id into Qdrant for every live row in LIBRARY_UNIFIED."""
+    collection = collection_name or RAG_CONFIG.get("qdrant_collection_name")
+    library_df = fetch_sheet_as_df(sheets_client, config["LIBRARY_UNIFIED"])
+    if library_df.empty or "status" not in library_df.columns:
+        return pd.DataFrame()
+    live_df = library_df[library_df["status"] == "live"]
+    results = []
+    for _, row in live_df.iterrows():
+        pdf_id = str(row.get("pdf_id", ""))
+        file_id = str(row.get("gcp_file_id", ""))
+        if not pdf_id or not file_id:
+            continue
+        success = update_file_id_for_pdf_id(qdrant_client, collection, pdf_id, file_id)
+        results.append({"pdf_id": pdf_id, "gcp_file_id": file_id, "updated": success})
     return pd.DataFrame(results)
