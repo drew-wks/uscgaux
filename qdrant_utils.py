@@ -7,6 +7,20 @@ from qdrant_client import models
 from env_config import env_config, RAG_CONFIG
 from gcp_utils import fetch_sheet_as_df
 
+
+def _validate_metadata(metadata: dict, require_file_id: bool = False) -> bool:
+    """Return True if metadata has required keys."""
+    if not isinstance(metadata, dict):
+        logging.warning("🚫 metadata missing or not a dict: %s", metadata)
+        return False
+
+    pdf_id = metadata.get("pdf_id")
+    gcp_file_id = metadata.get("gcp_file_id") or metadata.get("file_id")
+    if not pdf_id or (require_file_id and not gcp_file_id):
+        logging.warning("🚫 Missing required metadata keys: %s", metadata)
+        return False
+    return True
+
 config = env_config()
 
 
@@ -294,14 +308,10 @@ def get_summaries_by_pdf_id(client: QdrantClient, collection_name: str, pdf_ids:
                 continue
 
             metadata = payload.get("metadata", {})
-            if not isinstance(metadata, dict):
-                logging.warning("🚫 Skipping record with malformed metadata: %s", payload)
+            if not _validate_metadata(metadata, require_file_id=True):
                 continue
-            
+
             pdf_id = metadata.get("pdf_id")
-            if not pdf_id:
-                logging.warning("⚠️ Skipping record without pdf_id: %s", payload)
-                continue
             
             title = metadata.get("title")
             pdf_file_name = metadata.get("pdf_file_name")
@@ -407,11 +417,9 @@ def get_gcp_file_ids_by_pdf_id(client: QdrantClient, collection_name: str, pdf_i
             if not isinstance(payload, dict):
                 continue
             meta = payload.get("metadata", {})
-            if not isinstance(meta, dict):
+            if not _validate_metadata(meta, require_file_id=True):
                 continue
             pid = meta.get("pdf_id")
-            if not pid:
-                continue
             fid = meta.get("gcp_file_id") or meta.get("file_id")
             file_map.setdefault(str(pid), set())
             if fid:
@@ -424,6 +432,11 @@ def get_gcp_file_ids_by_pdf_id(client: QdrantClient, collection_name: str, pdf_i
         for pid, fids in file_map.items()
     ]
     return pd.DataFrame(rows)
+
+
+def get_file_ids_by_pdf_id(client: QdrantClient, collection_name: str, pdf_ids: List[str]) -> pd.DataFrame:
+    """Backwards compatible wrapper for get_gcp_file_ids_by_pdf_id."""
+    return get_gcp_file_ids_by_pdf_id(client, collection_name, pdf_ids)
 
 
 def update_file_id_for_pdf_id(client: QdrantClient, collection_name: str, pdf_id: str, gcp_file_id: str) -> bool:
