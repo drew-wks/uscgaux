@@ -1,2 +1,5 @@
 pytest
 pandas
+nbformat
+nbconvert
+IPython.display

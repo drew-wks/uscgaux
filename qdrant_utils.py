@@ -382,6 +382,7 @@ def delete_records_by_pdf_id(
             logging.exception("❌ Failed to delete records for pdf_id %s", pdf_id)
 
 
+
 def get_file_ids_by_pdf_id(client: QdrantClient, collection_name: str, pdf_ids: List[str]) -> pd.DataFrame:
     """Return all unique gcp_file_id values for each pdf_id."""
     if not pdf_ids:
@@ -423,7 +424,6 @@ def get_file_ids_by_pdf_id(client: QdrantClient, collection_name: str, pdf_ids: 
         for pid, fids in file_map.items()
     ]
     return pd.DataFrame(rows)
-
 
 
 def update_file_id_for_pdf_id(client: QdrantClient, collection_name: str, pdf_id: str, gcp_file_id: str) -> bool:

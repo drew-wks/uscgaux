@@ -47,12 +47,15 @@ def test_file_exists_false(monkeypatch, mock_drive_client):
 
 
 def test_fetch_sheet_as_df(monkeypatch, mock_sheets_client):
-    fake_sheet = object()
-    monkeypatch.setattr(gcp_utils, 'fetch_sheet', lambda sc, sid: fake_sheet)
-    sample_df = pd.DataFrame({'a': [1, 2]})
-    monkeypatch.setattr(gcp_utils, 'get_as_dataframe', lambda sheet, evaluate_formulas=True, dtype=str: sample_df)
+    sheet = MagicMock()
+    sheet.get_all_values.return_value = [
+        ['a', 'b'],
+        ['1', '2'],
+        ['3', '4'],
+    ]
+    monkeypatch.setattr(gcp_utils, 'fetch_sheet', lambda sc, sid: sheet)
     df = gcp_utils.fetch_sheet_as_df(mock_sheets_client, 'sheet')
-    assert df.equals(sample_df)
+    assert df.equals(pd.DataFrame({'a': ['1', '3'], 'b': ['2', '4']}))
 
 
 
@@ -68,9 +71,9 @@ def test_fetch_sheet_empty(mock_sheets_client):
 
 
 def test_fetch_sheet_as_df_none(monkeypatch, mock_sheets_client):
-    fake_sheet = object()
-    monkeypatch.setattr(gcp_utils, 'fetch_sheet', lambda sc, sid: fake_sheet)
-    monkeypatch.setattr(gcp_utils, 'get_as_dataframe', lambda sheet, evaluate_formulas=True, dtype=str: None)
+    sheet = MagicMock()
+    sheet.get_all_values.return_value = []
+    monkeypatch.setattr(gcp_utils, 'fetch_sheet', lambda sc, sid: sheet)
     df = gcp_utils.fetch_sheet_as_df(mock_sheets_client, 'sheet')
     assert df.empty
 

@@ -37,4 +37,3 @@ def test_build_status_map(monkeypatch):
     assert list(df["in_qdrant"]) == [True, False]
     assert df.loc[0, "issues"] == []
     assert df.loc[1, "issues"] == ["Missing in Drive", "Missing in Qdrant"]
-
