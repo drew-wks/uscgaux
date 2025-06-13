@@ -2,4 +2,4 @@ pytest
 pandas
 nbformat
 nbconvert
-IPython.display
+IPython
