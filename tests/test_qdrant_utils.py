@@ -90,7 +90,7 @@ def test_update_qdrant_file_ids_for_live_rows(monkeypatch, mock_qdrant_client, m
     assert list(result["pdf_id"]) == ["1"]
 
 
-def test_get_file_ids_by_pdf_id(monkeypatch, mock_qdrant_client):
+def test_get_gcp_file_ids_by_pdf_id(monkeypatch, mock_qdrant_client):
     rec1 = MagicMock()
     rec1.payload = {"metadata": {"pdf_id": "p1", "gcp_file_id": "f1"}}
     rec2 = MagicMock()
@@ -103,7 +103,7 @@ def test_get_file_ids_by_pdf_id(monkeypatch, mock_qdrant_client):
 
     monkeypatch.setattr(mock_qdrant_client, "scroll", fake_scroll)
 
-    df = qdrant_utils.get_file_ids_by_pdf_id(mock_qdrant_client, "col", ["p1", "p2"])
+    df = qdrant_utils.get_gcp_file_ids_by_pdf_id(mock_qdrant_client, "col", ["p1", "p2"])
     df = df.sort_values("pdf_id").reset_index(drop=True)
 
     assert df.loc[0, "pdf_id"] == "p1"

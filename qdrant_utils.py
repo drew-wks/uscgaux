@@ -392,7 +392,6 @@ def delete_records_by_pdf_id(
             logging.exception("❌ Failed to delete records for pdf_id %s", pdf_id)
 
 
-
 def get_gcp_file_ids_by_pdf_id(client: QdrantClient, collection_name: str, pdf_ids: List[str]) -> pd.DataFrame:
     """Return all unique gcp_file_id values for each pdf_id."""
     if not pdf_ids:
@@ -434,11 +433,6 @@ def get_gcp_file_ids_by_pdf_id(client: QdrantClient, collection_name: str, pdf_i
     return pd.DataFrame(rows)
 
 
-def get_file_ids_by_pdf_id(client: QdrantClient, collection_name: str, pdf_ids: List[str]) -> pd.DataFrame:
-    """Backwards compatible wrapper for get_gcp_file_ids_by_pdf_id."""
-    return get_gcp_file_ids_by_pdf_id(client, collection_name, pdf_ids)
-
-
 def update_file_id_for_pdf_id(client: QdrantClient, collection_name: str, pdf_id: str, gcp_file_id: str) -> bool:
     """Update metadata.gcp_file_id for all points matching pdf_id."""
     try:
@@ -465,7 +459,6 @@ def update_file_id_for_pdf_id(client: QdrantClient, collection_name: str, pdf_id
 
 def update_qdrant_file_ids_for_live_rows(qdrant_client: QdrantClient, sheets_client, collection_name: str | None = None) -> pd.DataFrame:
     """Sync gcp_file_id into Qdrant for every live row in LIBRARY_UNIFIED."""
-    collection = collection_name or RAG_CONFIG.get("qdrant_collection_name")
     library_df = fetch_sheet_as_df(sheets_client, config["LIBRARY_UNIFIED"])
     if library_df.empty or "status" not in library_df.columns:
         return pd.DataFrame()
@@ -476,7 +469,7 @@ def update_qdrant_file_ids_for_live_rows(qdrant_client: QdrantClient, sheets_cli
         file_id = str(row.get("gcp_file_id", ""))
         if not pdf_id or not file_id:
             continue
-        success = update_file_id_for_pdf_id(qdrant_client, collection, pdf_id, file_id)
+        success = update_file_id_for_pdf_id(qdrant_client, collection_name, pdf_id, file_id)
         results.append({"pdf_id": pdf_id, "gcp_file_id": file_id, "updated": success})
     return pd.DataFrame(results)
 

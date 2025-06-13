@@ -76,9 +76,9 @@ def build_status_map(drive_client, sheets_client, qdrant_client) -> pd.DataFrame
     )
     status_df = status_df.merge(qdrant_files, on="pdf_id", how="left")
 
-    status_df["in_drive"] = status_df["in_drive"].fillna(False)
-    status_df["in_qdrant"] = status_df["in_qdrant"].fillna(False)
-    status_df["record_count"] = status_df["record_count"].fillna(0)
+    status_df["in_drive"] = status_df["in_drive"].fillna(False).astype(bool)
+    status_df["in_qdrant"] = status_df["in_qdrant"].fillna(False).astype(bool)
+    status_df["record_count"] = status_df["record_count"].fillna(0).astype(int)
 
     status_df["zero_record_count"] = status_df["in_qdrant"] & (status_df["record_count"] == 0)
 
