@@ -121,7 +121,7 @@ def propose_new_files(drive_client: DriveClient, sheets_client: SheetsClient, up
 
             collected_rows.append({
                 "pdf_id": pdf_id,
-                "google_id": file_id,
+                "gcp_file_id": file_id,
                 "link": file_link,
                 "pdf_file_name": file_name,
                 "status": "new_for_tagging",

@@ -6,7 +6,7 @@ import promote_files
 def test_upsert_single_file_rejected(monkeypatch):
     monkeypatch.setattr(promote_files, 'config', {'PDF_LIVE': 'live', 'LIBRARY_UNIFIED': 'lib'})
 
-    row = pd.Series({'pdf_id': '1', 'pdf_file_name': 'f.pdf', 'google_id': 'gid', 'status': 'new_tagged'})
+    row = pd.Series({'pdf_id': '1', 'pdf_file_name': 'f.pdf', 'gcp_file_id': 'gid', 'status': 'new_tagged'})
 
     monkeypatch.setattr(promote_files, 'in_qdrant', lambda client, col, pid: True)
 
@@ -18,7 +18,7 @@ def test_upsert_single_file_rejected(monkeypatch):
 
 def test_upsert_single_file_success(monkeypatch):
     monkeypatch.setattr(promote_files, 'config', {'PDF_LIVE': 'live', 'LIBRARY_UNIFIED': 'lib'})
-    row = pd.Series({'pdf_id': '2', 'pdf_file_name': 'g.pdf', 'google_id': 'gid', 'status': 'new_tagged'})
+    row = pd.Series({'pdf_id': '2', 'pdf_file_name': 'g.pdf', 'gcp_file_id': 'gid', 'status': 'new_tagged'})
 
     monkeypatch.setattr(promote_files, 'in_qdrant', lambda *a, **k: False)
     monkeypatch.setattr(promote_files, 'pdf_to_Docs_via_Drive', lambda *a, **k: ['doc'])

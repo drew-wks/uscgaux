@@ -19,7 +19,7 @@ def test_validate_core_metadata_format():
     df = pd.DataFrame({
         'pdf_id': ['1'],
         'pdf_file_name': ['a'],
-        'google_id': ['g'],
+        'gcp_file_id': ['g'],
         'link': ['l']
     })
     missing = library_utils.validate_core_metadata_format(df)

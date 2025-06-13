@@ -31,7 +31,7 @@ def delete_tagged(drive_client: DriveClient, sheets_client: SheetsClient, qdrant
     deleted_rows = []
 
     for i, row in rows_to_delete.iterrows():
-        file_id = str(row.get("google_id", ""))
+        file_id = str(row.get("gcp_file_id", ""))
         pdf_id = str(row.get("pdf_id", ""))
         filename = str(row.get("pdf_file_name", "unknown_file"))
         original_status = str(row.get("status", "unknown_status"))

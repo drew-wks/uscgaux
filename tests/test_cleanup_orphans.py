@@ -3,8 +3,8 @@ from unittest.mock import MagicMock
 import cleanup_orphans
 
 
-def test_find_rows_missing_google_ids(monkeypatch):
-    df = pd.DataFrame({'pdf_id': ['1', '2'], 'google_id': ['a', 'b']})
+def test_find_rows_missing_gcp_file_ids(monkeypatch):
+    df = pd.DataFrame({'pdf_id': ['1', '2'], 'gcp_file_id': ['a', 'b']})
 
     monkeypatch.setattr(cleanup_orphans, 'config', {'LIBRARY_UNIFIED': 'lib'})
     monkeypatch.setattr(cleanup_orphans, 'fetch_sheet', lambda sc, sid: MagicMock())
@@ -15,14 +15,14 @@ def test_find_rows_missing_google_ids(monkeypatch):
 
     monkeypatch.setattr(cleanup_orphans, 'flag_rows_as_orphans', fake_flag)
 
-    orphans, logs = cleanup_orphans.find_rows_missing_google_ids(MagicMock(), df, {'a'})
+    orphans, logs = cleanup_orphans.find_rows_missing_gcp_file_ids(MagicMock(), df, {'a'})
 
     assert list(orphans['pdf_id']) == ['2']
     assert logs == [{'action': 'flag', 'pdf_id': 'b'}]
 
 
 def test_find_files_missing_rows(monkeypatch):
-    lib_df = pd.DataFrame({'google_id': ['a']})
+    lib_df = pd.DataFrame({'gcp_file_id': ['a']})
     files_df = pd.DataFrame({'ID': ['a', 'b'], 'Name': ['one.pdf', 'two.pdf'], 'folder': ['PDF_TAGGING', 'PDF_TAGGING']})
 
     orphans, logs = cleanup_orphans.find_files_missing_rows(lib_df, files_df)

@@ -41,7 +41,7 @@ def validate_core_metadata_format(df):
     Raises:
         ValueError: If any required columns are missing.
     """
-    required_columns = {"pdf_id", "pdf_file_name", "google_id", "link"}
+    required_columns = {"pdf_id", "pdf_file_name", "gcp_file_id", "link"}
     existing_columns = set(df.columns.str.strip().str.lower())
     missing_columns = required_columns - existing_columns
 
@@ -194,7 +194,7 @@ def find_duplicates_against_reference(
         >>> find_duplicates_against_reference(
         ...     df_to_check=new_df,
         ...     reference_df=library_df,
-        ...     fields_to_check=[{"pdf_id": "abc123"}, {"google_id": "1A2B3C4D"}]
+        ...     fields_to_check=[{"pdf_id": "abc123"}, {"gcp_file_id": "1A2B3C4D"}]
         ... )
 
     3. Full row-level comparison:

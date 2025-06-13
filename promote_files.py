@@ -39,7 +39,7 @@ def upsert_single_file(drive_client: DriveClient, sheets_client: SheetsClient, q
     """
     pdf_id = str(row.get("pdf_id", ""))
     filename = str(row.get("pdf_file_name", ""))
-    file_id = str(row.get("google_id", ""))
+    file_id = str(row.get("gcp_file_id", ""))
 
     # Confirm pdf_id is not already in Qdrant
     if in_qdrant(qdrant_client, rag_config("qdrant_collection_name"), pdf_id):

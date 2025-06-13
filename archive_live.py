@@ -36,7 +36,7 @@ def archive_tagged(
 
     for i, row in rows_to_archive.iterrows():
         pdf_id = row.get("pdf_id", "[unknown]")
-        file_id = row.get("google_id")
+        file_id = row.get("gcp_file_id")
         filename = row.get("pdf_file_name", "unknown_file.pdf")
         row_index = library_df[library_df["pdf_id"] == pdf_id].index.tolist()
 

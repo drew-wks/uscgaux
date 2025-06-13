@@ -30,7 +30,7 @@ def flag_rows_as_orphans(sheet, df: pd.DataFrame, orphan_rows: pd.DataFrame) -> 
      
     for _, row in orphan_rows.iterrows():
         pdf_id = row["pdf_id"]
-        google_id = row.get("google_id", "unknown_id")
+        gcp_file_id = row.get("gcp_file_id", "unknown_id")
         filename = row.get("pdf_file_name", "unknown_filename")
         idx = df.index[df["pdf_id"] == pdf_id][0]
         df.at[idx, "status"] = "orphan_row"
@@ -40,7 +40,7 @@ def flag_rows_as_orphans(sheet, df: pd.DataFrame, orphan_rows: pd.DataFrame) -> 
 
         log_entries.append({
             "action": "orphan_row_flagged in LIBRARY_UNIFIED",
-            "pdf_id": google_id,
+            "pdf_id": gcp_file_id,
             "pdf_file_name": filename
         })
 
@@ -61,9 +61,9 @@ def flag_rows_as_orphans(sheet, df: pd.DataFrame, orphan_rows: pd.DataFrame) -> 
 
 
 
-def find_rows_missing_google_ids(sheets_client: SheetsClient, df: pd.DataFrame, all_file_ids: set) -> Tuple[pd.DataFrame, list[dict]]: 
+def find_rows_missing_gcp_file_ids(sheets_client: SheetsClient, df: pd.DataFrame, all_file_ids: set) -> Tuple[pd.DataFrame, list[dict]]: 
     """
-    Identify rows in the LIBRARY_UNIFIED sheet whose 'google_id' is not found in the set of file IDs,
+    Identify rows in the LIBRARY_UNIFIED sheet whose 'gcp_file_id' is not found in the set of file IDs,
     and delegate row flagging to a helper function.
 
     Args:
@@ -76,7 +76,7 @@ def find_rows_missing_google_ids(sheets_client: SheetsClient, df: pd.DataFrame, 
             - A DataFrame containing all orphan rows detected.
             - A list of dictionaries representing log entries for flagged rows.
     """
-    orphan_rows = df[~df["google_id"].astype(str).isin(all_file_ids)]
+    orphan_rows = df[~df["gcp_file_id"].astype(str).isin(all_file_ids)]
 
     if orphan_rows.empty:
         logging.info("✅ No orphan rows found in LIBRARY_UNIFIED.")
@@ -91,7 +91,7 @@ def find_rows_missing_google_ids(sheets_client: SheetsClient, df: pd.DataFrame, 
 
 def find_files_missing_rows(library_df: pd.DataFrame, all_files_df: pd.DataFrame) -> Tuple[pd.DataFrame, list[dict]]:
     """Identify orphan files in Google Drive not referenced in LIBRARY_UNIFIED.
-        - Compares file IDs from Google Drive with the 'google_id' values in the sheet DataFrame.
+        - Compares file IDs from Google Drive with the 'gcp_file_id' values in the sheet DataFrame.
         - Flags any unmatched files as orphaned.
         - Generates a list of log entries indicating the folder and file metadata.
 
@@ -104,8 +104,8 @@ def find_files_missing_rows(library_df: pd.DataFrame, all_files_df: pd.DataFrame
             - A DataFrame containing all orphan files not referenced in LIBRARY_UNIFIED.
             - A list of dictionaries representing log entries for each orphan file detected.
     """
-    google_ids_in_library_df = set(library_df["google_id"].astype(str).unique())
-    orphan_files = all_files_df[~all_files_df["ID"].astype(str).isin(google_ids_in_library_df)]
+    gcp_file_ids_in_library_df = set(library_df["gcp_file_id"].astype(str).unique())
+    orphan_files = all_files_df[~all_files_df["ID"].astype(str).isin(gcp_file_ids_in_library_df)]
     logging.info("⚠️ Found %s orphans (files in Google Drive folders but not in LIBRARY_UNIFIED).", len(orphan_files))
 
     log_entries = []
@@ -177,8 +177,8 @@ def find_orphans(drive_client: DriveClient, sheets_client: SheetsClient, qdrant_
     """
     library_df = fetch_sheet_as_df(sheets_client, config["LIBRARY_UNIFIED"])
     
-    if library_df.empty or "google_id" not in library_df.columns or "pdf_id" not in library_df.columns:
-        raise ValueError("LIBRARY_UNIFIED missing required columns (google_id, pdf_id) or is empty")
+    if library_df.empty or "gcp_file_id" not in library_df.columns or "pdf_id" not in library_df.columns:
+        raise ValueError("LIBRARY_UNIFIED missing required columns (gcp_file_id, pdf_id) or is empty")
 
     library_df["pdf_id"] = library_df["pdf_id"].astype(str)
 
@@ -193,7 +193,7 @@ def find_orphans(drive_client: DriveClient, sheets_client: SheetsClient, qdrant_
     tagginglive_files_list = pd.concat(drive_files_list, ignore_index=True)
     tagginglive_file_ids = set(tagginglive_files_list["ID"].astype(str).unique())
 
-    orphan_rows_missing_tagginglivefiles, row_log_entries = find_rows_missing_google_ids(sheets_client, library_df, tagginglive_file_ids)
+    orphan_rows_missing_tagginglivefiles, row_log_entries = find_rows_missing_gcp_file_ids(sheets_client, library_df, tagginglive_file_ids)
     orphan_tagginglivefiles_missing_rows, file_log_entries = find_files_missing_rows(library_df, tagginglive_files_list)
     orphan_records_missing_liverows, qdrant_log_entries = find_records_missing_liverows(qdrant_client, library_df)
 
