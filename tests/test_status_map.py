@@ -30,7 +30,7 @@ def test_build_status_map(monkeypatch):
     monkeypatch.setattr(status_map, "config", {"LIBRARY_UNIFIED": "lib", "PDF_LIVE": "live"})
     monkeypatch.setattr(status_map, "rag_config", lambda k: "col")
     monkeypatch.setattr(status_map, "fetch_sheet_as_df", lambda sc, sid: lib_df)
-    monkeypatch.setattr(status_map, "list_pdfs_in_folder", lambda dc, fid: drive_df)
+    monkeypatch.setattr(status_map, "list_files_in_folder", lambda dc, fid: drive_df)
     monkeypatch.setattr(status_map, "get_summaries_by_pdf_id", lambda qc, col, ids: qsum_df[qsum_df.pdf_id.isin(ids)])
     monkeypatch.setattr(status_map, "get_gcp_file_ids_by_pdf_id", lambda qc, col, ids: qfile_df[qfile_df.pdf_id.isin(ids)])
     monkeypatch.setattr(status_map, "get_all_pdf_ids_in_qdrant", lambda qc, col: ["p1", "p3", "p_orphan"])

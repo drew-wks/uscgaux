@@ -4,7 +4,7 @@ from typing import List
 import pandas as pd
 
 from env_config import env_config, rag_config
-from gcp_utils import fetch_sheet_as_df, list_pdfs_in_folder
+from gcp_utils import fetch_sheet_as_df, list_files_in_folder
 from qdrant_utils import (
     get_summaries_by_pdf_id,
     get_gcp_file_ids_by_pdf_id,
@@ -38,7 +38,7 @@ def build_status_map(drive_client, sheets_client, qdrant_client) -> pd.DataFrame
     live_df["in_sheet"] = True
 
     # Drive presence
-    drive_df = list_pdfs_in_folder(drive_client, config["PDF_LIVE"])
+    drive_df = list_files_in_folder(drive_client, config["PDF_LIVE"])
     drive_df["gcp_file_id"] = drive_df["ID"].astype(str)
     drive_df["in_drive"] = True
     drive_df.rename(columns={"Name": "file_name"}, inplace=True)

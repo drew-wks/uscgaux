@@ -4,7 +4,7 @@ from gspread.client import Client as SheetsClient
 from googleapiclient.discovery import Resource as DriveClient
 from qdrant_client import QdrantClient
 from env_config import env_config, rag_config, RAG_CONFIG
-from gcp_utils import move_pdf, fetch_sheet_as_df, fetch_sheet, file_exists
+from gcp_utils import file_exists, move_file, fetch_sheet_as_df, fetch_sheet
 from library_utils import find_duplicates_against_reference, validate_all_rows_format
 from qdrant_utils import in_qdrant
 from langchain_utils import init_vectorstore, pdf_to_Docs_via_Drive, chunk_Docs
@@ -66,7 +66,7 @@ def upsert_single_file(drive_client: DriveClient, sheets_client: SheetsClient, q
     qdrant.add_documents(docs_chunks)
 
     # Move PDF to PDF_LIVE folder
-    move_pdf(drive_client, file_id, config["PDF_LIVE"])
+    move_file(drive_client, file_id, config["PDF_LIVE"])
 
     # Change status in LIBRARY_UNIFIED → live
     row["status"] = "live"

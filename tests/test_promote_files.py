@@ -27,7 +27,7 @@ def test_upsert_single_file_success(monkeypatch):
     monkeypatch.setattr(promote_files, 'chunk_Docs', lambda docs, conf: ['chunk'])
     vec = MagicMock()
     monkeypatch.setattr(promote_files, 'init_vectorstore', lambda client: vec)
-    monkeypatch.setattr(promote_files, 'move_pdf', lambda *a, **k: None)
+    monkeypatch.setattr(promote_files, 'move_file', lambda *a, **k: None)
 
     sheet_mock = MagicMock()
     monkeypatch.setattr(promote_files, 'fetch_sheet', lambda sc, sid: sheet_mock)

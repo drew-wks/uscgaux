@@ -9,7 +9,7 @@ from qdrant_client import QdrantClient
 
 from env_config import rag_config, env_config
 from gcp_utils import (
-    move_pdf,
+    move_file,
     fetch_sheet_as_df,
     get_folder_name,
     file_exists,
@@ -48,7 +48,7 @@ def archive_tagged(
         filename = row.get("pdf_file_name", "unknown_file.pdf")
         row_index = library_df[library_df["pdf_id"] == pdf_id].index.tolist()
 
-        move_pdf(drive_client, file_id, config["PDF_ARCHIVE"])
+        move_file(drive_client, file_id, config["PDF_ARCHIVE"])
         delete_records_by_pdf_id(
             qdrant_client,
             rag_config("qdrant_collection_name"),

@@ -98,7 +98,7 @@ def get_folder_name(drive_client: DriveClient, file_id: str) -> str:
         return "Unknown"
 
 
-def list_pdfs_in_folder(drive_client: DriveClient, folder_id: str) -> pd.DataFrame:
+def list_files_in_folder(drive_client: DriveClient, folder_id: str) -> pd.DataFrame:
     """
     Fetch all PDF files from a Google Drive folder into a DataFrame.
     Returns columns: ['Name', 'ID', 'URL'].
@@ -130,7 +130,7 @@ def list_pdfs_in_folder(drive_client: DriveClient, folder_id: str) -> pd.DataFra
         return pd.DataFrame(columns=["Name", "ID", "URL"])
 
 
-def fetch_pdf(drive_client: DriveClient, file_id):
+def fetch_file(drive_client: DriveClient, file_id):
     """
     Download a PDF file from Google Drive into memory as BytesIO.
     Returns BytesIO object if successful, else None.
@@ -225,7 +225,7 @@ def fetch_sheet_as_df(sheets_client: SheetsClient, spreadsheet_id: str) -> pd.Da
         logging.error("🚨 [fetch_sheet_as_df] Failed to convert worksheet to DataFrame: %s", e)
         return pd.DataFrame()
 
-    
+
 
 def upload_pdf(drive_client: DriveClient, file_obj, file_name: str, folder_id: str) -> None:
     """
@@ -260,7 +260,7 @@ def upload_pdf(drive_client: DriveClient, file_obj, file_name: str, folder_id: s
         return None
 
 
-def move_pdf(drive_client: DriveClient, file_id, target_folder_id):
+def move_file(drive_client: DriveClient, file_id, target_folder_id):
     """
     Move a file to a new folder in Google Drive.
     

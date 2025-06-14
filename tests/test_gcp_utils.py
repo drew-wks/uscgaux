@@ -15,7 +15,7 @@ def test_get_folder_name(mock_drive_client):
     assert name == 'Folder'
 
 
-def test_list_pdfs_in_folder(mock_drive_client):
+def test_list_files_in_folder(mock_drive_client):
     first_call = MagicMock()
     first_call.execute.return_value = {
         'files': [{'id': '1', 'name': 'one.pdf'}],
@@ -27,7 +27,7 @@ def test_list_pdfs_in_folder(mock_drive_client):
         'nextPageToken': None
     }
     mock_drive_client.files.return_value.list.side_effect = [first_call, second_call]
-    df = gcp_utils.list_pdfs_in_folder(mock_drive_client, 'folder')
+    df = gcp_utils.list_files_in_folder(mock_drive_client, 'folder')
     assert list(df['ID']) == ['1', '2']
     assert df['URL'].iloc[0].startswith('https://drive.google.com/file/d/')
 
