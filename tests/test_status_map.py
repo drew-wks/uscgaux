@@ -46,7 +46,7 @@ def test_build_status_map(monkeypatch):
 
     # Orphan rows should be present
     assert any(df["issues"].apply(lambda iss: "Orphan Qdrant record" in iss))
-    assert any(df["issues"].apply(lambda iss: "Orphan file" in iss))
+    assert any(df["issues"].apply(lambda iss: "Missing in Sheet and Qdrant" in iss))
 
     # Specific issue list for p3
     row_p3 = df[df["pdf_id"] == "p3"].iloc[0]

@@ -166,7 +166,10 @@ def build_status_map(drive_client, sheets_client, qdrant_client) -> pd.DataFrame
                 "missing_pdf_id": False,
                 "missing_gcp_file_id": False,
                 "zero_record_count": None,
-                "issues": ["Orphan file"],
+                # File exists in Drive but is absent from both the tracking
+                # sheet and Qdrant. Record as missing from those sources so
+                # downstream consumers know it needs to be added or removed.
+                "issues": ["Missing in Sheet and Qdrant"],
             }
         )
 
