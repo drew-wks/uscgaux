@@ -4,7 +4,7 @@ from gspread.client import Client as SheetsClient
 from googleapiclient.discovery import Resource as DriveClient
 from qdrant_client import QdrantClient
 from env_config import env_config, rag_config, RAG_CONFIG
-from gcp_utils import move_pdf, fetch_sheet_as_df, fetch_sheet
+from gcp_utils import move_pdf, fetch_sheet_as_df, fetch_sheet, file_exists
 from library_utils import find_duplicates_against_reference, validate_all_rows_format
 from qdrant_utils import in_qdrant
 from langchain_utils import init_vectorstore, pdf_to_Docs_via_Drive, chunk_Docs
@@ -41,7 +41,13 @@ def upsert_single_file(drive_client: DriveClient, sheets_client: SheetsClient, q
     filename = str(row.get("pdf_file_name", ""))
     file_id = str(row.get("gcp_file_id", ""))
 
-    # TODO Confirm gcp_file_id exists in row and same gcp_file_id exists in Drive for this pdf_id 
+    # Confirm gcp_file_id exists and file is present in Drive
+    if not file_id:
+        logging.warning("Missing gcp_file_id for %s. Skipping promotion.", pdf_id)
+        return "failed", pdf_id
+    if not file_exists(drive_client, file_id):
+        logging.warning("File ID %s for %s not found in Drive. Skipping.", file_id, pdf_id)
+        return "failed", pdf_id
     
     # Confirm pdf_id is not already in Qdrant
     if in_qdrant(qdrant_client, rag_config("qdrant_collection_name"), pdf_id):
