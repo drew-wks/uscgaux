@@ -11,7 +11,7 @@ from gcp_utils import fetch_sheet_as_df
 from library_utils import validate_all_rows_format
 from propose_new_files import propose_new_files, FileLike
 from promote_files import promote_files
-from delete_tagged import delete_tagged
+from archive_delete_tagged import delete_tagged
 from status_map import build_status_map
 from ui_utils import init_auth, apply_styles, get_library_catalog_excel_and_date
 
@@ -30,8 +30,10 @@ st.write("")
 st.info(f"Run context: {config['RUN_CONTEXT']}")
 
 tabs = st.tabs([
-    "Propose PDFs",
-    "Admin",
+    "1.Propose PDFs",
+    "2.Update Metadata",
+    "3.Launch",
+    "Admin Tools",
     "Library",
     "DB Report",
 ])
@@ -40,7 +42,7 @@ tabs = st.tabs([
 with tabs[0]:
     st.write("")
     uploaded_files = st.file_uploader(
-        "Choose PDF files to propose", type="pdf", accept_multiple_files=True)
+        "Step 1: Choose PDF files to propose", type="pdf", accept_multiple_files=True)
     if uploaded_files:
         with st.spinner("Uploading & scanning PDFs for duplicates..."):
             new_rows_df, failed_files, duplicate_files = propose_new_files(
@@ -59,21 +61,37 @@ with tabs[0]:
 with tabs[1]:
     st.write("")
     with st.container():
-        st.markdown("**Step 1. Review proposed PDFs in `PDF_TAGGING`**")
-        indent_col, content_col = st.columns([0.05, 0.95])
-        link = f"https://drive.google.com/drive/folders/{config['PDF_TAGGING']}"
-        with content_col:
-            st.link_button("Open PDF_TAGGING", link)
-
-    with st.container():
-        st.markdown("**Step 2. Fill out metadata in `LIBRARY_UNIFIED`**")
+        st.markdown("**Step 2. Fill out metadata in `LIBRARY_UNIFIED` and set status to `new_tagged`**")
         indent_col, content_col = st.columns([0.05, 0.95])
         link = f"https://docs.google.com/spreadsheets/d/{config['LIBRARY_UNIFIED']}"
         with content_col:
             st.link_button("Open LIBRARY_UNIFIED", link)
 
+with tabs[2]:
+    st.write("")
     with st.container():
-        st.markdown("**Step 3. Remove items tagged in `LIBRARY_UNIFIED`**")
+        st.markdown("**Step 3. Promote new, tagged files to production**")
+        indent_col, content_col = st.columns([0.05, 0.95])
+        with content_col:
+            dry_run = st.checkbox(
+                "Optional: test functionality without uploading")
+            config["DRY_RUN"] = str(dry_run)
+            if st.button("Promote PDFs", key="promote_pdfs", type="secondary"):
+                with st.spinner("Promoting PDFs..."):
+                    promote_files(drive_client, sheets_client, qdrant_client)
+                st.success("✅ Files promoted")
+
+with tabs[3]:
+    st.write("")
+    with st.container():
+        st.markdown("**Review proposed PDFs in `PDF_TAGGING`**")
+        indent_col, content_col = st.columns([0.05, 0.95])
+        link = f"https://drive.google.com/drive/folders/{config['PDF_TAGGING']}"
+        with content_col:
+            st.link_button("Open PDF_TAGGING", link)
+    st.write("")        
+    with st.container():
+        st.markdown("**Remove items tagged in `LIBRARY_UNIFIED`**")
         indent_col, content_col = st.columns([0.05, 0.95])
         with content_col:
             if st.button("Remove flagged rows", key="remove_rows", type="secondary"):
@@ -86,53 +104,26 @@ with tabs[1]:
                         "✅ Rows flagged for deletion were removed from `LIBRARY_UNIFIED`, `PDF_TAGGING`/`PDF_LIVE` and Qdrant.")
                     st.dataframe(rows_to_delete.reset_index(
                         drop=True).rename(lambda x: x + 1, axis="index"))
-
+    st.write("")
     with st.container():
-        st.markdown("**Step 4. Validate rows in LIBRARY_UNIFIED**")
+        st.markdown("**Display a status map across systems showing orphan rows, PDFs and Qdrant records**")
         indent_col, content_col = st.columns([0.05, 0.95])
         with content_col:
-            if st.button("Validate rows format", key="validate_rows_format", type="secondary"):
-                with st.spinner("Searching rows, PDFs, and records..."):
-                    library_df = fetch_sheet_as_df(sheets_client, config["LIBRARY_UNIFIED"])
-                    valid_df, invalid_df, log_df = validate_all_rows_format(library_df)
-                if invalid_df.empty:
-                    st.success("✅ No invalid rows found.")
+            if st.button("Create status map", key="status_map", type="secondary"):
+                with st.spinner("Searching rows, PDFs, and records...Building status map..."):
+                    status_df, issues_df = build_status_map(
+                        drive_client, sheets_client, qdrant_client
+                    )
+                if issues_df.empty:
+                    st.info("No issues found — all rows are consistent across systems.")
                 else:
-                    if not log_df.empty:
-                        st.write("⚠️ Invalid rows found:")
-                        st.dataframe(log_df)
-                    if not invalid_df.empty:
-                        st.write("⚠️ Invalid rows detail:")
-                        st.dataframe(invalid_df)
-    
-    with st.container():
-    st.markdown("**Step 5. Build status map across systems to find orphan rows, PDFs and Qdrant records**")
-    indent_col, content_col = st.columns([0.05, 0.95])
-    with content_col:
-        if st.button("Run status map", key="status_map", type="secondary"):
-            with st.spinner("Searching rows, PDFs, and records...Building status map..."):
-                status_df = build_status_map(
-                    drive_client, sheets_client, qdrant_client
-                )
-            if status_df.empty:
-                st.info("No data returned.")
-            else:
-                st.dataframe(status_df)
+                    st.info("🚨 Issues Detected")
+                    st.dataframe(issues_df)
 
-    with st.container():
-        st.markdown("**Step 6. Promote new files to production**")
-        indent_col, content_col = st.columns([0.05, 0.95])
-        with content_col:
-            dry_run = st.checkbox(
-                "Optional: test functionality without uploading")
-            config["DRY_RUN"] = str(dry_run)
-            if st.button("Promote PDFs", key="promote_pdfs", type="secondary"):
-                with st.spinner("Promoting PDFs..."):
-                    promote_files(drive_client, sheets_client, qdrant_client)
-                st.success("✅ Files promoted")
+                    with st.expander("🔍 Show Full Status Map"):
+                        st.dataframe(status_df)
 
-
-with tabs[2]:
+with tabs[4]:
     st.write("")
     TARGET_STATUSES = ["live"]
     library_unified_df = fetch_sheet_as_df(
@@ -164,8 +155,7 @@ with tabs[2]:
         },
     )
 
-
-with tabs[3]:
+with tabs[5]:
     st.write("")
 
     try:

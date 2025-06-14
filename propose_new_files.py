@@ -93,6 +93,7 @@ def propose_new_files(drive_client: DriveClient, sheets_client: SheetsClient, up
     fields_to_check = [{"pdf_id": pdf_id} for pdf_id, _ in file_map.values()]
     duplicate_pdf_ids = set()
     try:
+        logging.info("Checking for duplicates.")
         duplicate_rows = find_duplicates_against_reference(
             df_to_check=pd.DataFrame(fields_to_check),
             reference_df=library_unified_df,

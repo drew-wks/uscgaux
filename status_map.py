@@ -1,5 +1,5 @@
 import logging
-from typing import List
+from typing import List, Tuple
 
 import pandas as pd
 
@@ -15,8 +15,53 @@ from qdrant_utils import (
 config = env_config()
 
 
-def build_status_map(drive_client, sheets_client, qdrant_client) -> pd.DataFrame:
-    """Build a consolidated status map across Sheet, Drive and Qdrant."""
+
+def build_status_map(drive_client, sheets_client, qdrant_client) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Build a comprehensive status map of PDF records across Google Sheets (LIBRARY_UNIFIED), 
+    Google Drive (PDF_LIVE), and Qdrant (vector database), identifying inconsistencies 
+    and missing data across systems.
+
+    This function inspects the `live` entries in the LIBRARY_UNIFIED spreadsheet 
+    and evaluates the state of each document across three dimensions:
+    
+    - Presence in the Google Sheet (`in_sheet`)
+    - Presence in the Google Drive live folder (`in_drive`)
+    - Presence in the Qdrant collection (`in_qdrant`)
+    
+    It also flags issues such as:
+        - Missing or empty `pdf_id` or `gcp_file_id` in Sheet or Qdrant
+        - Duplicate `pdf_id` entries in the Sheet
+        - Qdrant records with zero documents
+        - Mismatches between expected and actual `gcp_file_id` values in Qdrant
+        - Qdrant records with no associated file ID at all
+
+    Returns two DataFrames:
+        1. `status_df`: A full overview with enriched metadata and computed diagnostic fields.
+        2. `issues_only`: A filtered subset of rows with one or more identified issues.
+
+    Columns in `status_df` include:
+        - `pdf_id`, `gcp_file_id`, `pdf_file_name`, `title`
+        - `in_sheet`, `in_drive`, `in_qdrant`
+        - `record_count`, `page_count`
+        - `gcp_file_ids`, `unique_file_count`
+        - `file_ids_match`: whether `gcp_file_id` in Sheet matches any listed in Qdrant
+        - Diagnostic flags:
+            - `empty_pdf_id_in_sheet`, `empty_gcp_file_id_in_sheet`
+            - `empty_gcp_file_id_in_qdrant`, `empty_gcp_file_id_any_source`
+            - `duplicate_pdf_id_in_sheet`, `zero_record_count`
+        - `issues`: A list of human-readable issue descriptions per row
+
+    Args:
+        drive_client (DriveClient): Authenticated Google Drive API client.
+        sheets_client (SheetsClient): Authenticated Google Sheets API client.
+        qdrant_client (QdrantClient): Initialized Qdrant client connected to the target collection.
+
+    Returns:
+        Tuple[pd.DataFrame, pd.DataFrame]: A tuple containing:
+            - status_df: Complete status map for all live documents
+            - issues_only: Subset of `status_df` containing rows with one or more issues
+    """
     library_df = fetch_sheet_as_df(sheets_client, config["LIBRARY_UNIFIED"])
     if library_df.empty:
         logging.warning("LIBRARY_UNIFIED is empty or unavailable")
@@ -76,6 +121,9 @@ def build_status_map(drive_client, sheets_client, qdrant_client) -> pd.DataFrame
     )
     status_df = status_df.merge(qdrant_files, on="pdf_id", how="left")
 
+    status_df["in_qdrant"] = (
+    status_df["in_qdrant"].fillna(False).infer_objects(copy=False).astype("bool")
+)
     status_df["in_drive"] = status_df["in_drive"].fillna(False).astype("bool")
     status_df["in_qdrant"] = status_df["in_qdrant"].fillna(False).astype("bool")
     status_df["record_count"] = status_df["record_count"].fillna(0).astype(int)
@@ -142,4 +190,8 @@ def build_status_map(drive_client, sheets_client, qdrant_client) -> pd.DataFrame
         "file_ids_match",
     ]
     status_df = status_df.reindex(columns=[c for c in desired_columns if c in status_df.columns])
-    return status_df
+    
+    issues_only = status_df[
+        status_df["issues"].apply(lambda x: isinstance(x, list) and len(x) > 0)
+    ]
+    return status_df, issues_only

@@ -118,7 +118,9 @@ def promote_files(drive_client: DriveClient, sheets_client: SheetsClient, qdrant
         None. The function exits early if validation fails.
     """
     # VALIDATE all rows
+    logging.info("Promoting new files.")
     library_df = fetch_sheet_as_df(sheets_client, config["LIBRARY_UNIFIED"])
+    logging.info("Validating row formatsin LIBRARY_UNIFIED.")
     valid_df, invalid_df, log_df = validate_all_rows_format(library_df)
 
     if not invalid_df.empty:
@@ -130,6 +132,7 @@ def promote_files(drive_client: DriveClient, sheets_client: SheetsClient, qdrant
     
     # Ensure only one row in TARGET_STATUS exists for this pdf_id
     to_promote_df = valid_df[valid_df["status"].isin(TARGET_STATUSES)]
+    logging.info("Checking for duplicates.")
     duplicate_rows = find_duplicates_against_reference(
     df_to_check=to_promote_df,
     fields_to_check=[{"pdf_id": pdf_id} for pdf_id in to_promote_df["pdf_id"].dropna().unique()]
@@ -138,6 +141,7 @@ def promote_files(drive_client: DriveClient, sheets_client: SheetsClient, qdrant
         logging.error("%s duplicate pdf_id(s) found in promoted rows. Promotion halted.", len(duplicate_rows))
         return
     
+    logging.info("Uploading to Qdrant.")
     uploaded_files = []
     rejected_files = []
     failed_files = []

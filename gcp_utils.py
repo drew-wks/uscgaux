@@ -122,7 +122,7 @@ def is_pdf_file(file_stream: Optional[BytesIO]) -> bool:
         return False
     
 
-def list_pdfs_in_folder(drive_client, folder_id: str, require_pdf: bool = True) -> pd.DataFrame:
+def list_files_in_folder(drive_client, folder_id: str, require_pdf: bool = True) -> pd.DataFrame:
     """
     List files in a Google Drive folder as a DataFrame with columns: ['Name', 'ID', 'URL'].
 
