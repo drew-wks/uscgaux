@@ -276,6 +276,14 @@ def get_summaries_by_pdf_id(client: QdrantClient, collection_name: str, pdf_ids:
             - record_count (int)
             - page_count (int, max page_number + 1)
             - point_ids (List[str])
+            
+    Notes:
+    - Records with invalid metadata (e.g., missing pdf_id) are skipped.
+    - `gcp_file_id` is not required in metadata for a record to be counted.
+    - `title`, `pdf_file_name`, and `page_count` are taken from the first valid record that contains them.
+    - All matching point IDs for a given pdf_id are collected into the `point_ids` list.
+    - The function performs a full scroll of all matching points in batches (limit=100,000).
+    - Returns an empty DataFrame if no matching pdf_ids are found or input is empty.
     """
     if not pdf_ids:
         return pd.DataFrame(columns=["pdf_id", "pdf_file_name", "title", "record_count", "page_count", "point_ids"])
@@ -345,58 +353,30 @@ def get_summaries_by_pdf_id(client: QdrantClient, collection_name: str, pdf_ids:
     return pd.DataFrame(summary.values())
 
 
-
-def delete_records_by_pdf_id(
-    client: QdrantClient,
-    collection_name: str,
-    pdf_ids: Union[List[str], pd.Series],
-    log_event_fn=None
-) -> None:
+def get_gcp_file_ids_by_pdf_id(client: QdrantClient, collection_name: str, pdf_ids: List[str]) -> pd.DataFrame:
     """
-    Deletes all Qdrant vectors whose metadata.pdf_id matches any in the given list.
+    Retrieve all unique gcp_file_id values from Qdrant metadata for each specified pdf_id.
+
+    This function scans the Qdrant collection for records matching the given pdf_ids
+    and extracts the associated 'gcp_file_id' (or legacy 'file_id') values from each record's metadata.
+    It groups the file IDs by pdf_id and returns a summary including how many unique file IDs were found.
 
     Args:
         client (QdrantClient): An initialized Qdrant client.
-        collection_name (str): Name of the Qdrant collection.
-        pdf_ids (List[str] or pd.Series): Unique PDF IDs to delete.
-        log_event_fn (callable, optional): Function to log deletion events externally.
+        collection_name (str): The name of the Qdrant collection to query.
+        pdf_ids (List[str]): A list of pdf_id values to match against metadata.pdf_id.
+
+    Returns:
+        pd.DataFrame: A DataFrame with the following columns:
+            - pdf_id (str): The identifier of the PDF document.
+            - gcp_file_ids (List[str]): A sorted list of unique file IDs associated with this pdf_id.
+            - unique_file_count (int): The number of distinct file IDs found for this pdf_id.
+
+    Notes:
+        - Records that lack a gcp_file_id are still included (with an empty list).
+        - Records with invalid or missing metadata are skipped.
+        - This function does not return duplicate file IDs for the same pdf_id.
     """
-    if collection_name is None:
-        raise ValueError("Missing Qdrant collection name.")
-
-    unique_pdf_ids = pd.Series(pdf_ids).dropna().unique()
-
-    if len(unique_pdf_ids) == 0:
-        logging.info("🟡 No PDF IDs provided to delete from Qdrant.")
-        return
-
-    for pdf_id in unique_pdf_ids:
-        try:
-            logging.info("🗑️ Deleting records for pdf_id: %s", pdf_id)
-            filter_condition = models.Filter(
-                must=[
-                    models.FieldCondition(
-                        key="metadata.pdf_id",
-                        match=models.MatchText(text=pdf_id)
-                    )
-                ]
-            )
-            result = client.delete(
-                collection_name=collection_name,
-                points_selector=filter_condition
-            )
-            logging.info("✅ Deleted points for pdf_id %s. Operation ID: %s", pdf_id, result.operation_id)
-            if log_event_fn:
-                log_event_fn("orphan_qdrant_record_deleted", str(pdf_id), f"Deleted from {collection_name}")
-
-        except (qdrant_exceptions.UnexpectedResponse,
-                qdrant_exceptions.ResponseHandlingException,
-                TypeError, ValueError):
-            logging.exception("❌ Failed to delete records for pdf_id %s", pdf_id)
-
-
-def get_gcp_file_ids_by_pdf_id(client: QdrantClient, collection_name: str, pdf_ids: List[str]) -> pd.DataFrame:
-    """Return all unique gcp_file_id values for each pdf_id."""
     if not pdf_ids:
         return pd.DataFrame(columns=["pdf_id", "gcp_file_ids", "unique_file_count"])
 
@@ -478,3 +458,51 @@ def update_qdrant_file_ids_for_live_rows(qdrant_client: QdrantClient, sheets_cli
         results.append({"pdf_id": pdf_id, "gcp_file_id": file_id, "updated": success})
     return pd.DataFrame(results)
 
+
+def delete_records_by_pdf_id(
+    client: QdrantClient,
+    collection_name: str,
+    pdf_ids: Union[List[str], pd.Series],
+    log_event_fn=None
+) -> None:
+    """
+    Deletes all Qdrant vectors whose metadata.pdf_id matches any in the given list.
+
+    Args:
+        client (QdrantClient): An initialized Qdrant client.
+        collection_name (str): Name of the Qdrant collection.
+        pdf_ids (List[str] or pd.Series): Unique PDF IDs to delete.
+        log_event_fn (callable, optional): Function to log deletion events externally.
+    """
+    if collection_name is None:
+        raise ValueError("Missing Qdrant collection name.")
+
+    unique_pdf_ids = pd.Series(pdf_ids).dropna().unique()
+
+    if len(unique_pdf_ids) == 0:
+        logging.info("🟡 No PDF IDs provided to delete from Qdrant.")
+        return
+
+    for pdf_id in unique_pdf_ids:
+        try:
+            logging.info("🗑️ Deleting records for pdf_id: %s", pdf_id)
+            filter_condition = models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key="metadata.pdf_id",
+                        match=models.MatchText(text=pdf_id)
+                    )
+                ]
+            )
+            result = client.delete(
+                collection_name=collection_name,
+                points_selector=filter_condition
+            )
+            logging.info("✅ Deleted points for pdf_id %s. Operation ID: %s", pdf_id, result.operation_id)
+            if log_event_fn:
+                log_event_fn("orphan_qdrant_record_deleted", str(pdf_id), f"Deleted from {collection_name}")
+
+        except (qdrant_exceptions.UnexpectedResponse,
+                qdrant_exceptions.ResponseHandlingException,
+                TypeError, ValueError):
+            logging.exception("❌ Failed to delete records for pdf_id %s", pdf_id)

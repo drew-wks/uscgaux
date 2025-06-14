@@ -26,15 +26,15 @@ def build_status_map(drive_client, sheets_client, qdrant_client) -> pd.DataFrame
     if live_df.empty:
         return pd.DataFrame()
 
-    # Flag duplicates and missing IDs while values are still raw
-    live_df["missing_pdf_id"] = live_df["pdf_id"].isna() | (live_df["pdf_id"].astype(str).str.strip() == "")
-    live_df["missing_gcp_file_id"] = live_df["gcp_file_id"].isna() | (
+    # Flag duplicates and empty IDs while values are still raw
+    live_df["empty_pdf_id_in_sheet"] = live_df["pdf_id"].isna() | (live_df["pdf_id"].astype(str).str.strip() == "")
+    live_df["empty_gcp_file_id_in_sheet"] = live_df["gcp_file_id"].isna() | (
         live_df["gcp_file_id"].astype(str).str.strip() == ""
     )
 
     live_df["pdf_id"] = live_df["pdf_id"].astype(str)
     live_df["gcp_file_id"] = live_df["gcp_file_id"].astype(str)
-    live_df["duplicate_pdf_id"] = live_df["pdf_id"].duplicated(keep=False)
+    live_df["duplicate_pdf_id_in_sheet"] = live_df["pdf_id"].duplicated(keep=False)
     live_df["in_sheet"] = True
 
     # Drive presence
@@ -76,15 +76,16 @@ def build_status_map(drive_client, sheets_client, qdrant_client) -> pd.DataFrame
     )
     status_df = status_df.merge(qdrant_files, on="pdf_id", how="left")
 
-    status_df["in_drive"] = status_df["in_drive"].fillna(False).astype(bool)
-    status_df["in_qdrant"] = status_df["in_qdrant"].fillna(False).astype(bool)
+    status_df["in_drive"] = status_df["in_drive"].fillna(False).astype("bool")
+    status_df["in_qdrant"] = status_df["in_qdrant"].fillna(False).astype("bool")
     status_df["record_count"] = status_df["record_count"].fillna(0).astype(int)
 
     status_df["zero_record_count"] = status_df["in_qdrant"] & (status_df["record_count"] == 0)
 
     # Flag rows where Qdrant records exist but have no associated gcp_file_id
-    status_df["missing_gcp_file_id"] = status_df["missing_gcp_file_id"] |\
-        (status_df["in_qdrant"] & (status_df["unique_file_count"].fillna(0) == 0))
+    status_df["unique_file_count"] = status_df["unique_file_count"].fillna(0).astype(int)
+    status_df["empty_gcp_file_id_in_qdrant"] = status_df["in_qdrant"] & (status_df["unique_file_count"] == 0)
+    status_df["missing_gcp_file_id"] = status_df["empty_gcp_file_id_in_sheet"] | status_df["empty_gcp_file_id_in_qdrant"]
 
     def file_ids_match(row) -> bool | None:
         if not row["in_qdrant"]:
@@ -98,12 +99,14 @@ def build_status_map(drive_client, sheets_client, qdrant_client) -> pd.DataFrame
 
     def collect_issues(row):
         issues: List[str] = []
-        if row.get("duplicate_pdf_id"):
-            issues.append("Duplicate pdf_id")
-        if row.get("missing_pdf_id"):
-            issues.append("Missing pdf_id")
-        if row.get("missing_gcp_file_id"):
-            issues.append("Missing gcp_file_id")
+        if row.get("duplicate_pdf_id_in_sheet"):
+            issues.append("Duplicate pdf_id in Sheet")
+        if row.get("empty_pdf_id_in_sheet"):
+            issues.append("Empty pdf_id in Sheet")
+        if row.get("empty_gcp_file_id_in_sheet"):
+            issues.append("Empty gcp_file_id in Sheet")
+        if row.get("empty_gcp_file_id_in_qdrant"):
+            issues.append("Empty gcp_file_id in Qdrant")
         if row.get("zero_record_count"):
             issues.append("No Qdrant records")
         if not row["in_drive"]:
@@ -111,82 +114,22 @@ def build_status_map(drive_client, sheets_client, qdrant_client) -> pd.DataFrame
         if not row["in_qdrant"]:
             issues.append("Missing in Qdrant")
         if row["file_ids_match"] is False:
-            issues.append("File ID mismatch")
+            issues.append("Qdrant record missing expected gcp_file_id")
         return issues
 
     status_df["issues"] = status_df.apply(collect_issues, axis=1)
 
-    # --- Orphan checks ---
-    existing_pairs = set(zip(status_df["pdf_id"], status_df["gcp_file_id"]))
-
-    orphan_rows = []
-    for _, row in qdrant_files.iterrows():
-        pid = str(row.get("pdf_id"))
-        ids = row.get("gcp_file_ids") or []
-        for fid in ids:
-            pair = (pid, str(fid))
-            if pair not in existing_pairs:
-                summary_row = qdrant_summary[qdrant_summary["pdf_id"] == pid]
-                rec_count = int(summary_row["record_count"].iloc[0]) if not summary_row.empty else 0
-                page_count = int(summary_row["page_count"].iloc[0]) if not summary_row.empty else None
-                file_name = summary_row["file_name"].iloc[0] if not summary_row.empty else None
-                orphan_rows.append(
-                    {
-                        "pdf_id": pid,
-                        "gcp_file_id": str(fid),
-                        "file_name": file_name,
-                        "in_sheet": False,
-                        "in_drive": str(fid) in drive_ids,
-                        "in_qdrant": True,
-                        "record_count": rec_count,
-                        "page_count": page_count,
-                        "gcp_file_ids": [str(fid)],
-                        "unique_file_count": 1,
-                        "file_ids_match": True,
-                        "duplicate_pdf_id": False,
-                        "missing_pdf_id": False,
-                        "missing_gcp_file_id": False,
-                        "zero_record_count": rec_count == 0,
-                        "issues": ["Orphan Qdrant record"] + ([] if str(fid) in drive_ids else ["Missing in Drive"]),
-                    }
-                )
-
-    drive_orphans = drive_df[~drive_df["gcp_file_id"].isin(status_df["gcp_file_id"])]
-    for _, row in drive_orphans.iterrows():
-        orphan_rows.append(
-            {
-                "pdf_id": None,
-                "gcp_file_id": row["gcp_file_id"],
-                "file_name": row.get("file_name"),
-                "in_sheet": False,
-                "in_drive": True,
-                "in_qdrant": False,
-                "record_count": None,
-                "page_count": None,
-                "gcp_file_ids": None,
-                "unique_file_count": None,
-                "file_ids_match": None,
-                "duplicate_pdf_id": False,
-                "missing_pdf_id": False,
-                "missing_gcp_file_id": False,
-                "zero_record_count": None,
-                # File exists in Drive but is absent from both the tracking
-                # sheet and Qdrant. Record as missing from those sources so
-                # downstream consumers know it needs to be added or removed.
-                "issues": ["Missing in Sheet and Qdrant"],
-            }
-        )
-
-    if orphan_rows:
-        status_df = pd.concat([status_df, pd.DataFrame(orphan_rows)], ignore_index=True)
-
     desired_columns = [
         "title",
         "pdf_file_name",
+        "pdf_id",
+        "gcp_file_id",
         "issues",
-        "missing_pdf_id",
-        "missing_gcp_file_id",
-        "duplicate_pdf_id",
+        "empty_pdf_id_in_sheet",
+        "empty_gcp_file_id_any_source",
+        "empty_gcp_file_id_in_sheet",
+        "empty_gcp_file_id_in_qdrant",
+        "duplicate_pdf_id_in_sheet",
         "in_sheet",
         "in_drive",
         "file_name",
@@ -197,9 +140,6 @@ def build_status_map(drive_client, sheets_client, qdrant_client) -> pd.DataFrame
         "unique_file_count",
         "zero_record_count",
         "file_ids_match",
-        "pdf_id",
-        "gcp_file_id",
     ]
     status_df = status_df.reindex(columns=[c for c in desired_columns if c in status_df.columns])
     return status_df
-

@@ -7,55 +7,50 @@ from gcp_utils import fetch_sheet
 config = env_config()
 
 
-def flag_rows_as_orphans(sheet, full_df: pd.DataFrame, orphan_rows: pd.DataFrame) -> List[Dict[str, Any]]:
-    """Placeholder that flags orphan rows in a sheet.
-
-    In production this would update the Google Sheet and return log entries of the
-    updates performed. The implementation here is minimal so that unit tests can
-    patch it.
+def flag_rows_as_orphans(sheet, df: pd.DataFrame, orphan_rows: pd.DataFrame) -> list[dict]:
     """
-    return []
+    Update the 'status' column in LIBRARY_UNIFIED and batch update the Google Sheet
+    for the rows identified as orphans. Logs status and prepares log entries.
 
+    Args:
+        sheet: The gspread worksheet object for LIBRARY_UNIFIED.
+        df (pd.DataFrame): Full DataFrame of the sheet.
+        orphan_rows (pd.DataFrame): Subset of rows identified as orphans.
 
-def find_rows_missing_gcp_file_ids(
-    sheets_client,
-    library_df: pd.DataFrame,
-    known_file_ids: Iterable[str],
-) -> Tuple[pd.DataFrame, List[Dict[str, Any]]]:
-    """Return rows whose GCP file IDs are missing from ``known_file_ids``.
-
-    Parameters
-    ----------
-    sheets_client:
-        Authenticated gspread client used to fetch the sheet.
-    library_df:
-        DataFrame of rows from ``LIBRARY_UNIFIED``.
-    known_file_ids:
-        Set of file IDs known to exist in Drive.
+    Returns:
+        List of dictionaries representing log entries for each flagged row.
     """
-    missing_mask = ~library_df["gcp_file_id"].isin(list(known_file_ids))
-    orphans: pd.DataFrame = library_df.loc[missing_mask].copy()
-    if orphans.empty:
-        return orphans, []
+    log_entries = []
+    updates = []
+     
+    for _, row in orphan_rows.iterrows():
+        pdf_id = row["pdf_id"]
+        gcp_file_id = row.get("gcp_file_id", "unknown_id")
+        filename = row.get("pdf_file_name", "unknown_filename")
+        idx = df.index[df["pdf_id"] == pdf_id][0]
+        df.at[idx, "status"] = "orphan_row"
 
-    sheet = fetch_sheet(sheets_client, config["LIBRARY_UNIFIED"])
-    logs = flag_rows_as_orphans(sheet, library_df, orphans)
-    return orphans, logs
+        action_msg = f"orphan_row_flagged in LIBRARY_UNIFIED — pdf_id: {pdf_id}, file: {filename}"
+        logging.info(action_msg)
 
+        log_entries.append({
+            "action": "orphan_row_flagged in LIBRARY_UNIFIED",
+            "pdf_id": gcp_file_id,
+            "pdf_file_name": filename
+        })
 
-def find_files_missing_rows(
-    library_df: pd.DataFrame, files_df: pd.DataFrame
-) -> Tuple[pd.DataFrame, List[Dict[str, Any]]]:
-    """Return Drive files that do not have matching rows in ``library_df``."""
-    orphan_mask = ~files_df["ID"].isin(library_df["gcp_file_id"])
-    orphans: pd.DataFrame = files_df.loc[orphan_mask].copy()
-    logs: List[Dict[str, Any]] = []
-    for _, row in orphans.iterrows():
-        logs.append(
-            {
-                "action": f"orphan_file_detected_in_{row.get('folder')}",
-                "pdf_id": row["ID"],
-                "pdf_file_name": row["Name"],
-            }
-        )
-    return orphans, logs
+        row_idx = idx + 2
+        updates.append({
+            "range": f"A{row_idx}:{row_idx}",
+            "values": [df.loc[idx].tolist()]
+        })
+
+    if updates:
+        try:
+            sheet.batch_update(updates, value_input_option="RAW")
+            logging.info("✅ Updated %s orphan rows in LIBRARY_UNIFIED.", len(updates))
+        except Exception as e:
+            logging.error("❌ Failed batch row update in LIBRARY_UNIFIED: %s", e)
+
+    return log_entries
+
