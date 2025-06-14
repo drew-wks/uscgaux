@@ -9,6 +9,7 @@ def test_upsert_single_file_rejected(monkeypatch):
     row = pd.Series({'pdf_id': '1', 'pdf_file_name': 'f.pdf', 'gcp_file_id': 'gid', 'status': 'new_tagged'})
 
     monkeypatch.setattr(promote_files, 'in_qdrant', lambda client, col, pid: True)
+    monkeypatch.setattr(promote_files, 'file_exists', lambda *a, **k: True)
 
     result, pid = promote_files.upsert_single_file(MagicMock(), MagicMock(), MagicMock(), row, 0)
 
@@ -21,6 +22,7 @@ def test_upsert_single_file_success(monkeypatch):
     row = pd.Series({'pdf_id': '2', 'pdf_file_name': 'g.pdf', 'gcp_file_id': 'gid', 'status': 'new_tagged'})
 
     monkeypatch.setattr(promote_files, 'in_qdrant', lambda *a, **k: False)
+    monkeypatch.setattr(promote_files, 'file_exists', lambda *a, **k: True)
     monkeypatch.setattr(promote_files, 'pdf_to_Docs_via_Drive', lambda *a, **k: ['doc'])
     monkeypatch.setattr(promote_files, 'chunk_Docs', lambda docs, conf: ['chunk'])
     vec = MagicMock()
