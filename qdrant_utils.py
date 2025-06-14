@@ -308,7 +308,10 @@ def get_summaries_by_pdf_id(client: QdrantClient, collection_name: str, pdf_ids:
                 continue
 
             metadata = payload.get("metadata", {})
-            if not _validate_metadata(metadata, require_file_id=True):
+            # Presence checks should not require a gcp_file_id since
+            # older records may not have it populated. Validate only
+            # that a pdf_id exists so these points are counted.
+            if not _validate_metadata(metadata, require_file_id=False):
                 continue
 
             pdf_id = metadata.get("pdf_id")
