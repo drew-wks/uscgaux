@@ -104,7 +104,13 @@ def propose_new_files(drive_client: DriveClient, sheets_client: SheetsClient, up
             reason = f"Duplicate detected: pdf_id '{pdf_id}' already exists in LIBRARY_UNIFIED ({file_name})"
             logging.warning(reason)
             try:
-                log_event(sheets_client, "duplicate_skipped", str(pdf_id), str(filename), extra_columns=[reason])
+                log_event(
+                    sheets_client,
+                    "duplicate_skipped",
+                    str(pdf_id),
+                    str(file_name),
+                    extra_columns=[reason],
+                )
             except Exception as log_error:
                 logging.error("⚠️ Failed to log duplicate_skipped event: %s", log_error)
             duplicate_files.append(file_name)
@@ -128,7 +134,12 @@ def propose_new_files(drive_client: DriveClient, sheets_client: SheetsClient, up
                 "status_timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
             })
 
-            log_event(sheets_client, "new_pdf_to_PDF_TAGGING", str(pdf_id), str(filename))
+            log_event(
+                sheets_client,
+                "new_pdf_to_PDF_TAGGING",
+                str(pdf_id),
+                str(file_name),
+            )
 
         except Exception as e:
             logging.error("❌ Failed to process %s: %s", file_name, e)
