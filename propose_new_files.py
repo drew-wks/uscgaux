@@ -19,7 +19,7 @@ from gspread.client import Client as SheetsClient
 from googleapiclient.discovery import Resource as DriveClient
 from env_config import env_config
 from library_utils import compute_pdf_id, find_duplicates_against_reference, validate_core_metadata_format, append_new_rows
-from gcp_utils import upload_pdf, fetch_sheet_as_df
+from gcp_utils import is_pdf_file, upload_pdf, fetch_sheet_as_df
 from log_writer import log_event
 
 config = env_config()
@@ -72,14 +72,18 @@ def propose_new_files(drive_client: DriveClient, sheets_client: SheetsClient, up
     duplicate_files = []
     collected_rows = []
 
-    # Step 1: Precompute pdf_ids for all uploaded files
+    # Step 1: Precompute pdf_ids for valid uploaded PDFs
     file_map = {}
     for uploaded_file in uploaded_files:
         file_name = uploaded_file.name
         try:
+            if not is_pdf_file(uploaded_file):
+                raise ValueError("Not a valid PDF (missing '%PDF-' header)")
+
             pdf_id = compute_pdf_id(uploaded_file)
             if not pdf_id:
                 raise ValueError("Could not compute pdf_id")
+
             file_map[file_name] = (pdf_id, uploaded_file)
         except Exception as e:
             logging.warning("⚠️ %s for file: %s", e, file_name)

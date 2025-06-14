@@ -2,6 +2,7 @@
 
 import logging
 import json
+from typing import Optional
 from io import BytesIO
 import pandas as pd
 import gspread
@@ -98,17 +99,50 @@ def get_folder_name(drive_client: DriveClient, file_id: str) -> str:
         return "Unknown"
 
 
-def list_files_in_folder(drive_client: DriveClient, folder_id: str) -> pd.DataFrame:
+def is_pdf_file(file_stream: Optional[BytesIO]) -> bool:
     """
-    Fetch all PDF files from a Google Drive folder into a DataFrame.
-    Returns columns: ['Name', 'ID', 'URL'].
+    Check if the given file stream is a valid PDF based on its header.
+
+    Args:
+        file_stream (BytesIO): A file-like object containing the file's binary content.
+
+    Returns:
+        bool: True if the file is a PDF (starts with %PDF), False otherwise.
+    """
+    if not file_stream:
+        return False
+
+    try:
+        file_stream.seek(0)
+        header = file_stream.read(5)
+        file_stream.seek(0)
+        return header == b'%PDF-'
+    except Exception as e:
+        logging.warning("Could not validate PDF header: %s", e)
+        return False
+    
+
+def list_pdfs_in_folder(drive_client, folder_id: str, require_pdf: bool = True) -> pd.DataFrame:
+    """
+    List files in a Google Drive folder as a DataFrame with columns: ['Name', 'ID', 'URL'].
+
+    If require_pdf=True (default), filters by MIME type. If False, checks file header for valid PDF.
+
+    Args:
+        drive_client: Authenticated Google Drive API client.
+        folder_id (str): Folder ID to search.
+        require_pdf (bool): If True, restrict to PDFs via MIME type. If False, verify by content.
+
+    Returns:
+        pd.DataFrame
     """
     try:
-        all_files = []
+        query = f"'{folder_id}' in parents and trashed=false"
+        if require_pdf:
+            query += " and mimeType='application/pdf'"
+
+        files = []
         page_token = None
-        query = (
-            f"'{folder_id}' in parents and trashed=false and mimeType='application/pdf'"
-        )
         while True:
             resp = drive_client.files().list(
                 q=query,
@@ -116,24 +150,49 @@ def list_files_in_folder(drive_client: DriveClient, folder_id: str) -> pd.DataFr
                 pageSize=100,
                 pageToken=page_token,
             ).execute()
-            files = resp.get("files", [])
-            all_files.extend(files)
+            files.extend(resp.get("files", []))
             page_token = resp.get("nextPageToken")
             if not page_token:
                 break
-        df = pd.DataFrame(all_files).rename(columns={"name": "Name", "id": "ID"})
+
+        df = pd.DataFrame(files).rename(columns={"id": "ID", "name": "Name"})
         df["URL"] = df["ID"].apply(lambda x: f"https://drive.google.com/file/d/{x}/view")
-        return df
+
+        if not require_pdf and not df.empty:
+            from io import BytesIO
+            from googleapiclient.http import MediaIoBaseDownload
+
+            def is_pdf(file_id: str) -> bool:
+                try:
+                    fh = BytesIO()
+                    request = drive_client.files().get_media(fileId=file_id)
+                    MediaIoBaseDownload(fh, request).next_chunk()
+                    fh.seek(0)
+                    return fh.read(5) == b"%PDF-"
+                except Exception:
+                    return False
+
+            df = df[df["ID"].apply(is_pdf)]
+
+        return df[["Name", "ID", "URL"]]
+
     except Exception as e:
-        logging.error("Could not fetch PDFs from Drive: %s", e)
-        # Return an empty DataFrame with the expected columns
+        logging.error("Failed to list files from folder %s: %s", folder_id, e)
         return pd.DataFrame(columns=["Name", "ID", "URL"])
 
+    
 
-def fetch_file(drive_client: DriveClient, file_id):
+def fetch_file(drive_client, file_id: str, require_pdf: bool = True) -> Optional[BytesIO]:
     """
-    Download a PDF file from Google Drive into memory as BytesIO.
-    Returns BytesIO object if successful, else None.
+    Download a file from Google Drive into memory as BytesIO.
+
+    Args:
+        drive_client: An authenticated Google Drive API client.
+        file_id (str): The ID of the file to fetch.
+        require_pdf (bool): If True, the file must be a valid PDF or None is returned.
+
+    Returns:
+        BytesIO: File content if successfully downloaded and (optionally) validated as a PDF; otherwise None.
     """
     try:
         request = drive_client.files().get_media(fileId=file_id)
@@ -143,9 +202,14 @@ def fetch_file(drive_client: DriveClient, file_id):
         while not done:
             status, done = downloader.next_chunk()
         fh.seek(0)
+
+        if require_pdf and not is_pdf_file(fh):
+            logging.warning("File ID %s is not a valid PDF", file_id)
+            return None
+
         return fh
     except HttpError as e:
-        logging.error("Failed to download PDF file with ID %s: %s", file_id, e)
+        logging.error("Failed to download file with ID %s: %s", file_id, e)
         return None
 
 
@@ -290,11 +354,38 @@ def move_file(drive_client: DriveClient, file_id, target_folder_id):
         return False
 
 
-def file_exists(drive_client: DriveClient, file_id: str) -> bool:
-    """Check if a file exists in Google Drive."""
+def file_exists(drive_client, file_id: str, require_pdf: bool = True) -> bool:
+    """
+    Check if a file exists in Google Drive, and optionally verify it's a valid PDF.
+
+    Args:
+        drive_client: An authenticated Google Drive API client.
+        file_id (str): The ID of the file to check.
+        require_pdf (bool): If True, confirms the file is a valid PDF.
+
+    Returns:
+        bool: True if the file exists (and is a PDF if required), False otherwise.
+    """
     try:
-        drive_client.files().get(fileId=file_id, fields="id").execute()
+        metadata = drive_client.files().get(fileId=file_id, fields="id").execute()
+        if not require_pdf:
+            return True
+
+        # Fetch and validate as PDF
+        request = drive_client.files().get_media(fileId=file_id)
+        fh = BytesIO()
+        downloader = MediaIoBaseDownload(fh, request)
+        done = False
+        while not done:
+            status, done = downloader.next_chunk()
+        fh.seek(0)
+
+        if not is_pdf_file(fh):
+            logging.warning("File ID %s exists but is not a valid PDF", file_id)
+            return False
+
         return True
+
     except HttpError as e:
         if getattr(e, "resp", None) and getattr(e.resp, "status", None) == 404:
             logging.info("File not found in Drive: %s", file_id)
