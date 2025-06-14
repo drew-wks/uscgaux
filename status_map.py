@@ -82,6 +82,10 @@ def build_status_map(drive_client, sheets_client, qdrant_client) -> pd.DataFrame
 
     status_df["zero_record_count"] = status_df["in_qdrant"] & (status_df["record_count"] == 0)
 
+    # Flag rows where Qdrant records exist but have no associated gcp_file_id
+    status_df["missing_gcp_file_id"] = status_df["missing_gcp_file_id"] |\
+        (status_df["in_qdrant"] & (status_df["unique_file_count"].fillna(0) == 0))
+
     def file_ids_match(row) -> bool | None:
         if not row["in_qdrant"]:
             return None

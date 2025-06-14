@@ -419,7 +419,9 @@ def get_gcp_file_ids_by_pdf_id(client: QdrantClient, collection_name: str, pdf_i
             if not isinstance(payload, dict):
                 continue
             meta = payload.get("metadata", {})
-            if not _validate_metadata(meta, require_file_id=True):
+            # Include records even when gcp_file_id is missing so that
+            # build_status_map can flag them appropriately.
+            if not _validate_metadata(meta, require_file_id=False):
                 continue
             pid = meta.get("pdf_id")
             fid = meta.get("gcp_file_id") or meta.get("file_id")
