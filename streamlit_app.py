@@ -13,6 +13,7 @@ from propose_new_files import propose_new_files, FileLike
 from cleanup_orphans import find_orphans
 from promote_files import promote_files
 from delete_tagged import delete_tagged
+from status_map import build_status_map
 from ui_utils import init_auth, apply_styles, get_library_catalog_excel_and_date
 
 
@@ -142,6 +143,21 @@ with tabs[1]:
                 with st.spinner("Promoting PDFs..."):
                     promote_files(drive_client, sheets_client, qdrant_client)
                 st.success("✅ Files promoted")
+
+    # Step 7
+    with st.container():
+        st.markdown("**Step 7. Build status map across systems**")
+        indent_col, content_col = st.columns([0.05, 0.95])
+        with content_col:
+            if st.button("Run status map", key="status_map", type="secondary"):
+                with st.spinner("Building status map..."):
+                    status_df = build_status_map(
+                        drive_client, sheets_client, qdrant_client
+                    )
+                if status_df.empty:
+                    st.info("No data returned.")
+                else:
+                    st.dataframe(status_df)
 
 
 with tabs[2]:
