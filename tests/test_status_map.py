@@ -35,7 +35,7 @@ def test_build_status_map(monkeypatch):
     monkeypatch.setattr(status_map, "get_gcp_file_ids_by_pdf_id", lambda qc, col, ids: qfile_df[qfile_df.pdf_id.isin(ids)])
     monkeypatch.setattr(status_map, "get_all_pdf_ids_in_qdrant", lambda qc, col: ["p1", "p3", "p_orphan"])
 
-    df = status_map.build_status_map(MagicMock(), MagicMock(), MagicMock())
+    df, _ = status_map.build_status_map(MagicMock(), MagicMock(), MagicMock())
 
     # sort for deterministic order
     df = df.sort_values(["pdf_id", "gcp_file_id"], na_position="last").reset_index(drop=True)
@@ -51,5 +51,9 @@ def test_build_status_map(monkeypatch):
     row_p3 = df[df["pdf_id"] == "p3"].iloc[0]
     assert "No Qdrant records" in row_p3["issues"]
     assert "Qdrant record missing expected gcp_file_id" in row_p3["issues"]
+
+    orphan = df[df["gcp_file_id"] == "f_orphan"].iloc[0]
+    assert orphan["in_drive"] and not orphan["in_sheet"] and not orphan["in_qdrant"]
+    assert "Orphan in Drive" in orphan["issues"]
 
 

@@ -98,6 +98,16 @@ def build_status_map(drive_client, sheets_client, qdrant_client) -> Tuple[pd.Dat
         qdrant_summary["in_qdrant"] = True
     qdrant_files = get_gcp_file_ids_by_pdf_id(qdrant_client, collection, pdf_ids)
 
+    # Identify drive files not referenced in Sheet or Qdrant
+    qdrant_file_ids: set[str] = set()
+    if not qdrant_files.empty and "gcp_file_ids" in qdrant_files.columns:
+        qdrant_file_ids = set(
+            qdrant_files["gcp_file_ids"].explode().dropna().astype(str).tolist()
+        )
+    sheet_file_ids = set(live_df["gcp_file_id"])
+    orphan_drive_ids = drive_ids - sheet_file_ids - qdrant_file_ids
+    orphan_drive_df = drive_df[drive_df["gcp_file_id"].isin(orphan_drive_ids)].copy()
+
     # Orphan pdf_ids present only in Qdrant
     all_pdf_ids = set(get_all_pdf_ids_in_qdrant(qdrant_client, collection))
     orphan_pdf_ids = sorted(all_pdf_ids - set(live_df["pdf_id"]))
@@ -120,6 +130,18 @@ def build_status_map(drive_client, sheets_client, qdrant_client) -> Tuple[pd.Dat
         on="pdf_id", how="left"
     )
     status_df = status_df.merge(qdrant_files, on="pdf_id", how="left")
+
+    if not orphan_drive_df.empty:
+        orphan_drive_df = orphan_drive_df.assign(
+            pdf_id=pd.NA,
+            in_sheet=False,
+            in_qdrant=False,
+            pdf_file_name=orphan_drive_df["file_name"],
+        )
+        for col in status_df.columns:
+            if col not in orphan_drive_df.columns:
+                orphan_drive_df[col] = pd.NA
+        status_df = pd.concat([status_df, orphan_drive_df[status_df.columns]], ignore_index=True)
 
     status_df["in_qdrant"] = (
     status_df["in_qdrant"].fillna(False).infer_objects(copy=False).astype("bool")
@@ -147,15 +169,15 @@ def build_status_map(drive_client, sheets_client, qdrant_client) -> Tuple[pd.Dat
 
     def collect_issues(row):
         issues: List[str] = []
-        if row.get("duplicate_pdf_id_in_sheet"):
+        if row.get("duplicate_pdf_id_in_sheet") is True:
             issues.append("Duplicate pdf_id in Sheet")
-        if row.get("empty_pdf_id_in_sheet"):
+        if row.get("empty_pdf_id_in_sheet") is True:
             issues.append("Empty pdf_id in Sheet")
-        if row.get("empty_gcp_file_id_in_sheet"):
+        if row.get("empty_gcp_file_id_in_sheet") is True:
             issues.append("Empty gcp_file_id in Sheet")
-        if row.get("empty_gcp_file_id_in_qdrant"):
+        if row.get("empty_gcp_file_id_in_qdrant") is True:
             issues.append("Empty gcp_file_id in Qdrant")
-        if row.get("zero_record_count"):
+        if row.get("zero_record_count") is True:
             issues.append("No Qdrant records")
         if not row["in_drive"]:
             issues.append("Missing in Drive")
@@ -163,6 +185,8 @@ def build_status_map(drive_client, sheets_client, qdrant_client) -> Tuple[pd.Dat
             issues.append("Missing in Qdrant")
         if row["file_ids_match"] is False:
             issues.append("Qdrant record missing expected gcp_file_id")
+        if row["in_drive"] and not row["in_sheet"] and not row["in_qdrant"]:
+            issues.append("Orphan in Drive")
         return issues
 
     status_df["issues"] = status_df.apply(collect_issues, axis=1)
