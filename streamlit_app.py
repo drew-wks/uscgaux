@@ -84,11 +84,34 @@ with tabs[2]:
 with tabs[3]:
     st.write("")
     with st.container():
-        st.markdown("**Review proposed PDFs in `PDF_TAGGING`**")
+        st.markdown("**Review PDFs in `PDF_TAGGING`, `PDF_LIVE`, `PDF_ARCHIVE`**")
+        st.write("Do not upload new PDFs this way unless you are prepared to deal with the new file_id they generate.")
+        indent_col, content_col1, content_col2, content_col3 = st.columns([0.05, 0.32, 0.32, 0.33])
+        link1 = f"https://drive.google.com/drive/folders/{config['PDF_TAGGING']}"
+        link2 = f"https://drive.google.com/drive/folders/{config['PDF_LIVE']}"
+        link3 = f"https://drive.google.com/drive/folders/{config['PDF_ARCHIVE']}"
+        with content_col1:
+            st.link_button("Open PDF_TAGGING", link1)
+        with content_col2:
+            st.link_button("Open LIVE", link2)
+        with content_col3:
+            st.link_button("Open PDF_ARCHIVE", link3)
+    
+    st.write("") 
+    with st.container():
+        st.markdown("**Validate rows in LIBRARY_UNIFIED**")
         indent_col, content_col = st.columns([0.05, 0.95])
-        link = f"https://drive.google.com/drive/folders/{config['PDF_TAGGING']}"
         with content_col:
-            st.link_button("Open PDF_TAGGING", link)
+            if st.button("Validate rows format", key="validate_rows_format", type="secondary"):
+                with st.spinner("Searching rows, PDFs, and records..."):
+                    valid_df, invalid_df, log_df = validate_all_rows_format(sheets_client)
+                if invalid_df.empty:
+                    st.success("✅ No invalid rows found.")
+                else:
+                    if not invalid_df.empty:
+                        st.write("⚠️ Invalid rows found in LIBRARY_UNIFIED")
+                        st.dataframe(invalid_df)    
+
     st.write("")        
     with st.container():
         st.markdown("**Remove items tagged in `LIBRARY_UNIFIED`**")
