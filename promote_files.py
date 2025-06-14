@@ -41,6 +41,8 @@ def upsert_single_file(drive_client: DriveClient, sheets_client: SheetsClient, q
     filename = str(row.get("pdf_file_name", ""))
     file_id = str(row.get("gcp_file_id", ""))
 
+    # TODO Confirm gcp_file_id exists in row and same gcp_file_id exists in Drive for this pdf_id 
+    
     # Confirm pdf_id is not already in Qdrant
     if in_qdrant(qdrant_client, rag_config("qdrant_collection_name"), pdf_id):
         logging.warning("%s already exists in Qdrant. Skipping promotion.", pdf_id)

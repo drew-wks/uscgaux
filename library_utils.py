@@ -52,7 +52,7 @@ def validate_all_rows_format(df):
     """
     Validates all rows in the dataframe regardless of status.
 
-    - Required fields (except ignored) must be non-empty
+    - Required fields (except optional) must be non-empty
     - All fields must be strings, except for aux_specific and public_release
     - aux_specific and public_release must be valid booleans
     - Date fields must be ISO 8601 UTC strings if present
