@@ -10,7 +10,6 @@ from qdrant_utils import init_qdrant_client
 from gcp_utils import fetch_sheet_as_df
 from library_utils import validate_all_rows_format
 from propose_new_files import propose_new_files, FileLike
-from cleanup_orphans import find_orphans
 from promote_files import promote_files
 from delete_tagged import delete_tagged
 from status_map import build_status_map

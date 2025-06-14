@@ -25,3 +25,6 @@ Before running tests
 # Run st.testing.v1.AppTest
 After editing streamlit_app.py
 After I ask you to test the Streamlit app
+
+# Network access
+Whenever requests are blocked due to network access restrictions, include the list of requests made your report

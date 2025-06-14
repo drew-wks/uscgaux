@@ -73,7 +73,7 @@ def archive_tagged(
             logging.error("Failed to remove row %s for %s: %s", i, pdf_id, e)
 
         archived_rows.append(row)
-        log_event(sheets_client, "archived", pdf_id, filename)
+        log_event(sheets_client, "archived", str(pdf_id), str(filename))
 
     return pd.DataFrame(archived_rows)
 
@@ -117,8 +117,8 @@ def delete_tagged(
                 log_event(
                     sheets_client,
                     f"file_deleted from {folder_name}",
-                    pdf_id,
-                    filename,
+                    str(pdf_id),
+                    str(filename),
                     extra_columns=[original_status],
                 )
             except Exception as e:  # pragma: no cover - log only
@@ -148,8 +148,8 @@ def delete_tagged(
             log_event(
                 sheets_client,
                 "deleted",
-                pdf_id,
-                filename,
+                str(pdf_id),
+                str(filename),
                 extra_columns=[original_status, folder_name],
             )
         except Exception as e:  # pragma: no cover - log only

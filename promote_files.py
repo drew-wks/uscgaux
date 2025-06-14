@@ -69,7 +69,7 @@ def upsert_single_file(drive_client: DriveClient, sheets_client: SheetsClient, q
     sheet = fetch_sheet(sheets_client, config["LIBRARY_UNIFIED"])
     sheet.update(f"A{idx+2}", [row.tolist()])
 
-    log_event(sheets_client, "promoted_to_live", pdf_id, filename)
+    log_event(sheets_client, "promoted_to_live", str(pdf_id), str(filename))
     return "uploaded", pdf_id
 
 

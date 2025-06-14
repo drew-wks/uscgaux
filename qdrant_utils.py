@@ -384,7 +384,7 @@ def delete_records_by_pdf_id(
             )
             logging.info("✅ Deleted points for pdf_id %s. Operation ID: %s", pdf_id, result.operation_id)
             if log_event_fn:
-                log_event_fn("orphan_qdrant_record_deleted", pdf_id, f"Deleted from {collection_name}")
+                log_event_fn("orphan_qdrant_record_deleted", str(pdf_id), f"Deleted from {collection_name}")
 
         except (qdrant_exceptions.UnexpectedResponse,
                 qdrant_exceptions.ResponseHandlingException,
