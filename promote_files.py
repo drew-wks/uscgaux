@@ -5,7 +5,11 @@ from googleapiclient.discovery import Resource as DriveClient
 from qdrant_client import QdrantClient
 from env_config import env_config, rag_config, RAG_CONFIG
 from gcp_utils import file_exists, move_file, fetch_sheet_as_df, fetch_sheet
-from library_utils import find_duplicates_against_reference, validate_all_rows_format
+from library_utils import (
+    find_duplicates_against_reference,
+    validate_all_rows_format,
+    remove_rows,
+)
 from qdrant_utils import in_qdrant
 from langchain_utils import init_vectorstore, pdf_to_Docs_via_Drive, chunk_Docs
 from log_writer import log_event
@@ -76,6 +80,20 @@ def upsert_single_file(drive_client: DriveClient, sheets_client: SheetsClient, q
     logging.info("Set status to live and status_timestamp, upsert_date to  for pdf_id: %s", pdf_id)
     sheet = fetch_sheet(sheets_client, config["LIBRARY_UNIFIED"])
     sheet.update(f"A{idx+2}", [row.tolist()])
+
+    # Remove any other rows with the same pdf_id
+    try:
+        current_df = fetch_sheet_as_df(sheets_client, config["LIBRARY_UNIFIED"])
+        all_indices = current_df.index[current_df["pdf_id"].astype(str) == pdf_id].tolist()
+        if len(all_indices) > 1:
+            keep_index = min(all_indices)
+            rows_to_remove = [i for i in all_indices if i != keep_index]
+            remove_rows(sheets_client, config["LIBRARY_UNIFIED"], rows_to_remove)
+            logging.info(
+                "Removed %s duplicate row(s) for pdf_id %s", len(rows_to_remove), pdf_id
+            )
+    except Exception as dup_err:
+        logging.error("Failed to remove duplicate rows for %s: %s", pdf_id, dup_err)
 
     log_event(sheets_client, "promoted_to_live", str(pdf_id), str(filename))
     return "uploaded", pdf_id

@@ -89,23 +89,39 @@ def propose_new_files(drive_client: DriveClient, sheets_client: SheetsClient, up
             logging.warning("⚠️ %s for file: %s", e, file_name)
             failed_files.append(file_name)
 
-    # Step 2: Batch check for duplicates
+    # Step 2: Batch check for duplicates (existing sheet and within batch)
     fields_to_check = [{"pdf_id": pdf_id} for pdf_id, _ in file_map.values()]
     duplicate_pdf_ids = set()
     try:
         duplicate_rows = find_duplicates_against_reference(
             df_to_check=pd.DataFrame(fields_to_check),
-            reference_df=library_unified_df
+            reference_df=library_unified_df,
         )
-        duplicate_pdf_ids = set(duplicate_rows["pdf_id"]) if not duplicate_rows.empty else set()
+        sheet_duplicate_ids = (
+            set(duplicate_rows["pdf_id"]) if not duplicate_rows.empty else set()
+        )
     except Exception as e:
         logging.error("❌ Failed during duplicate check: %s", e)
         return pd.DataFrame(), [file.name for file in uploaded_files], []
 
+    # Detect duplicates within the uploaded batch itself
+    pdf_id_counts = {}
+    for pdf_id, _ in file_map.values():
+        pdf_id_counts[pdf_id] = pdf_id_counts.get(pdf_id, 0) + 1
+    batch_duplicate_ids = {pid for pid, count in pdf_id_counts.items() if count > 1}
+    duplicate_pdf_ids = sheet_duplicate_ids.union(batch_duplicate_ids)
+
     # Step 3: Log duplicates
     for file_name, (pdf_id, _) in file_map.items():
         if pdf_id in duplicate_pdf_ids:
-            reason = f"Duplicate detected: pdf_id '{pdf_id}' already exists in LIBRARY_UNIFIED ({file_name})"
+            if pdf_id in batch_duplicate_ids and pdf_id not in sheet_duplicate_ids:
+                reason = (
+                    f"Duplicate detected within upload batch: pdf_id '{pdf_id}' appears more than once ({file_name})"
+                )
+            else:
+                reason = (
+                    f"Duplicate detected: pdf_id '{pdf_id}' already exists in LIBRARY_UNIFIED ({file_name})"
+                )
             logging.warning(reason)
             try:
                 log_event(
@@ -149,8 +165,26 @@ def propose_new_files(drive_client: DriveClient, sheets_client: SheetsClient, up
             logging.error("❌ Failed to process %s: %s", file_name, e)
             failed_files.append(file_name)
 
-    # Step 5: Write to sheet
+    # Step 5: Validate metadata before writing
     new_rows_df = pd.DataFrame(collected_rows)
+    if not new_rows_df.empty:
+        try:
+            missing_columns = validate_core_metadata_format(new_rows_df)
+            if missing_columns:
+                logging.warning(
+                    "⚠️ New rows are missing required metadata columns: %s. Skipping append.",
+                    missing_columns,
+                )
+                failed_files.extend(new_rows_df["pdf_file_name"].tolist())
+                new_rows_df = pd.DataFrame()
+            else:
+                logging.info("✅ Metadata validation passed.")
+        except Exception as e:
+            logging.error("❌ Failed during metadata validation: %s", e)
+            failed_files.extend(new_rows_df["pdf_file_name"].tolist())
+            new_rows_df = pd.DataFrame()
+
+    # Step 6: Write to sheet if validation succeeded
     if not new_rows_df.empty:
         try:
             append_new_rows(sheets_client, config["LIBRARY_UNIFIED"], new_rows_df)
@@ -158,15 +192,5 @@ def propose_new_files(drive_client: DriveClient, sheets_client: SheetsClient, up
             logging.error("❌ Failed to append rows to LIBRARY_UNIFIED: %s", e)
             failed_files.extend(new_rows_df["pdf_file_name"].tolist())
             new_rows_df = pd.DataFrame()
-
-    # Step 6: Check metadata formatting
-    try:
-        missing_columns = validate_core_metadata_format(new_rows_df)
-        if missing_columns:
-            logging.warning("⚠️ New rows are missing required metadata columns: %s. Please fix the sheet structure before continuing.", missing_columns)
-        else:
-            logging.info("✅ Metadata validation passed.")
-    except Exception as e:
-        logging.error("❌ Failed during metadata validation: %s", e)
 
     return new_rows_df, failed_files, duplicate_files
