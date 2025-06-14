@@ -59,7 +59,6 @@ with tabs[0]:
 
 with tabs[1]:
     st.write("")
-    # Step 1
     with st.container():
         st.markdown("**Step 1. Review proposed PDFs in `PDF_TAGGING`**")
         indent_col, content_col = st.columns([0.05, 0.95])
@@ -67,7 +66,6 @@ with tabs[1]:
         with content_col:
             st.link_button("Open PDF_TAGGING", link)
 
-    # Step 2
     with st.container():
         st.markdown("**Step 2. Fill out metadata in `LIBRARY_UNIFIED`**")
         indent_col, content_col = st.columns([0.05, 0.95])
@@ -75,7 +73,6 @@ with tabs[1]:
         with content_col:
             st.link_button("Open LIBRARY_UNIFIED", link)
 
-    # Step 3
     with st.container():
         st.markdown("**Step 3. Remove items tagged in `LIBRARY_UNIFIED`**")
         indent_col, content_col = st.columns([0.05, 0.95])
@@ -91,7 +88,6 @@ with tabs[1]:
                     st.dataframe(rows_to_delete.reset_index(
                         drop=True).rename(lambda x: x + 1, axis="index"))
 
-    # Step 4
     with st.container():
         st.markdown("**Step 4. Validate rows in LIBRARY_UNIFIED**")
         indent_col, content_col = st.columns([0.05, 0.95])
@@ -109,29 +105,21 @@ with tabs[1]:
                     if not invalid_df.empty:
                         st.write("⚠️ Invalid rows detail:")
                         st.dataframe(invalid_df)
-
-    # Step 5
+    
     with st.container():
-        st.markdown("**Step 5. Check for orphans: rows, PDFs and Qdrant records**")
-        indent_col, content_col = st.columns([0.05, 0.95])
-        with content_col:
-            if st.button("Find orphans", key="find_orphans", type="secondary"):
-                with st.spinner("Searching rows, PDFs, and records..."):
-                    orphan_rows_df, orphan_files_df, orphan_qdrant_records_df, log_df = find_orphans(
-                        drive_client, sheets_client, qdrant_client)  # type: ignore
-                if orphan_rows_df.empty and orphan_files_df.empty and orphan_qdrant_records_df.empty:
-                    st.success("✅ No orphans found.")
-                else:
-                    if not orphan_rows_df.empty:
-                        st.write("⚠️ Orphan rows found in LIBRARY_UNIFIED")
-                        st.dataframe(orphan_rows_df)
-                    if not orphan_files_df.empty:
-                        st.write("⚠️ Orphan files found in PDF folders")
-                        st.dataframe(orphan_files_df)
-                    if not orphan_qdrant_records_df.empty:
-                        st.write("⚠️ Orphan records found in Qdrant")
-                        st.dataframe(orphan_qdrant_records_df)
-    # Step 6
+    st.markdown("**Step 5. Build status map across systems to find orphan rows, PDFs and Qdrant records**")
+    indent_col, content_col = st.columns([0.05, 0.95])
+    with content_col:
+        if st.button("Run status map", key="status_map", type="secondary"):
+            with st.spinner("Searching rows, PDFs, and records...Building status map..."):
+                status_df = build_status_map(
+                    drive_client, sheets_client, qdrant_client
+                )
+            if status_df.empty:
+                st.info("No data returned.")
+            else:
+                st.dataframe(status_df)
+
     with st.container():
         st.markdown("**Step 6. Promote new files to production**")
         indent_col, content_col = st.columns([0.05, 0.95])
@@ -143,21 +131,6 @@ with tabs[1]:
                 with st.spinner("Promoting PDFs..."):
                     promote_files(drive_client, sheets_client, qdrant_client)
                 st.success("✅ Files promoted")
-
-    # Step 7
-    with st.container():
-        st.markdown("**Step 7. Build status map across systems**")
-        indent_col, content_col = st.columns([0.05, 0.95])
-        with content_col:
-            if st.button("Run status map", key="status_map", type="secondary"):
-                with st.spinner("Building status map..."):
-                    status_df = build_status_map(
-                        drive_client, sheets_client, qdrant_client
-                    )
-                if status_df.empty:
-                    st.info("No data returned.")
-                else:
-                    st.dataframe(status_df)
 
 
 with tabs[2]:
