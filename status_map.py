@@ -176,5 +176,26 @@ def build_status_map(drive_client, sheets_client, qdrant_client) -> pd.DataFrame
     if orphan_rows:
         status_df = pd.concat([status_df, pd.DataFrame(orphan_rows)], ignore_index=True)
 
+    desired_columns = [
+        "title",
+        "pdf_file_name",
+        "issues",
+        "missing_pdf_id",
+        "missing_gcp_file_id",
+        "duplicate_pdf_id",
+        "in_sheet",
+        "in_drive",
+        "file_name",
+        "in_qdrant",
+        "record_count",
+        "page_count",
+        "gcp_file_ids",
+        "unique_file_count",
+        "zero_record_count",
+        "file_ids_match",
+        "pdf_id",
+        "gcp_file_id",
+    ]
+    status_df = status_df.reindex(columns=[c for c in desired_columns if c in status_df.columns])
     return status_df
 
