@@ -21,3 +21,7 @@ Note that the effects will not take place until the next task session.
 After editing a function
 Before submitting a PR
 Before running tests
+
+# Run st.testing.v1.AppTest
+After editing streamlit_app.py
+After I ask you to test the Streamlit app
