@@ -16,15 +16,15 @@ def test_build_status_map(monkeypatch):
         "URL": ["u1", "u3", "u4"],
     })
     qsum_df = pd.DataFrame({
-        "pdf_id": ["p1", "p3", "p_orphan"],
-        "file_name": ["one.pdf", "three.pdf", "orphan_q.pdf"],
-        "record_count": [2, 0, 1],
-        "page_count": [1, 1, 1],
+        "pdf_id": ["p1", "p2", "p3", "p_orphan"],
+        "file_name": ["one.pdf", "two.pdf", "three.pdf", "orphan_q.pdf"],
+        "record_count": [2, 1, 0, 1],
+        "page_count": [1, 1, 1, 1],
     })
     qfile_df = pd.DataFrame({
-        "pdf_id": ["p1", "p3", "p_orphan"],
-        "gcp_file_ids": [["f1"], ["f_mismatch"], ["f_orphan_q"]],
-        "unique_file_count": [1, 1, 1],
+        "pdf_id": ["p1", "p2", "p3", "p_orphan"],
+        "gcp_file_ids": [["f1"], [], ["f_mismatch"], ["f_orphan_q"]],
+        "unique_file_count": [1, 0, 1, 1],
     })
 
     monkeypatch.setattr(status_map, "config", {"LIBRARY_UNIFIED": "lib", "PDF_LIVE": "live"})
