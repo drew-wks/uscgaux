@@ -119,8 +119,6 @@ def promote_files(drive_client: DriveClient, sheets_client: SheetsClient, qdrant
     if not duplicate_rows.empty:
         logging.error("%s duplicate pdf_id(s) found in promoted rows. Promotion halted.", len(duplicate_rows))
         return
-
-    to_promote_df = to_promote_df.reset_index(drop=True)
     
     uploaded_files = []
     rejected_files = []
@@ -130,7 +128,7 @@ def promote_files(drive_client: DriveClient, sheets_client: SheetsClient, qdrant
         if row.get("status") not in TARGET_STATUSES:
             continue
 
-        result, pdf_id = upsert_single_file(drive_client, sheets_client, qdrant_client, row, idx)
+        result, pdf_id = upsert_single_file(drive_client, sheets_client, qdrant_client, row, row.name)
         if result == "uploaded":
             uploaded_files.append(pdf_id)
         elif result == "rejected":
