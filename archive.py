@@ -8,13 +8,8 @@ from googleapiclient.discovery import Resource as DriveClient
 from qdrant_client import QdrantClient
 
 from env_config import rag_config, env_config
-from utils.gcp_utils import (
-    move_file,
-    fetch_sheet_as_df,
-    get_folder_name,
-    file_exists,
-)
-from utils.qdrant_utils import delete_records_by_pdf_id, in_qdrant
+from utils.gcp_utils import move_file, fetch_sheet_as_df
+from utils.qdrant_utils import delete_records_by_pdf_id
 from utils.library_utils import fetch_rows_by_status, remove_rows, append_new_rows
 from utils.log_writer import log_event
 
