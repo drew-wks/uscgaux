@@ -34,20 +34,24 @@ def test_streamlit_app_runs(monkeypatch):
     fake_library_utils = types.SimpleNamespace(
         validate_all_rows_format=lambda *a, **k: (pd.DataFrame(), pd.DataFrame(), pd.DataFrame())
     )
-    fake_propose = types.SimpleNamespace(propose_new=lambda *a, **k: (pd.DataFrame(), [], []), FileLike=object)
+    fake_propose = types.SimpleNamespace(
+        propose_new=lambda *a, **k: (pd.DataFrame(), [], []),
+        FileLike=object,
+    )
     fake_promote = types.SimpleNamespace(promote_files=lambda *a, **k: None)
-    fake_delete = types.SimpleNamespace(delete_tagged=lambda *a, **k: pd.DataFrame())
-    fake_status = types.SimpleNamespace(build_status_map=lambda *a, **k: (pd.DataFrame(), pd.DataFrame()))
+    fake_cleanup = types.SimpleNamespace(
+        delete_tagged=lambda *a, **k: pd.DataFrame(),
+        build_status_map=lambda *a, **k: (pd.DataFrame(), pd.DataFrame()),
+    )
     fake_ui = types.SimpleNamespace(init_auth=lambda: None, apply_styles=lambda: None)
 
     monkeypatch.setitem(sys.modules, "env_config", fake_env_config)
-    monkeypatch.setitem(sys.modules, "gcp_utils", fake_gcp_utils)
-    monkeypatch.setitem(sys.modules, "qdrant_utils", fake_qdrant_utils)
-    monkeypatch.setitem(sys.modules, "library_utils", fake_library_utils)
+    monkeypatch.setitem(sys.modules, "utils.gcp_utils", fake_gcp_utils)
+    monkeypatch.setitem(sys.modules, "utils.qdrant_utils", fake_qdrant_utils)
+    monkeypatch.setitem(sys.modules, "utils.library_utils", fake_library_utils)
     monkeypatch.setitem(sys.modules, "propose_new", fake_propose)
-    monkeypatch.setitem(sys.modules, "promote_files", fake_promote)
-    monkeypatch.setitem(sys.modules, "archive_delete_tagged", fake_delete)
-    monkeypatch.setitem(sys.modules, "status_map", fake_status)
+    monkeypatch.setitem(sys.modules, "promote", fake_promote)
+    monkeypatch.setitem(sys.modules, "cleanup", fake_cleanup)
     monkeypatch.setitem(sys.modules, "ui_utils", fake_ui)
 
     at = st.AppTest.from_file("streamlit_app.py")
