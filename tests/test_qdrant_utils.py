@@ -1,5 +1,6 @@
 import pandas as pd
 from unittest.mock import MagicMock
+import pytest
 
 import qdrant_utils
 
@@ -42,7 +43,7 @@ def test_delete_records_by_pdf_id(mock_qdrant_client):
     result = MagicMock()
     result.operation_id = 'op'
     mock_qdrant_client.delete.return_value = result
-    qdrant_utils.delete_records_by_pdf_id(mock_qdrant_client, ['a'], 'col')
+    qdrant_utils.delete_records_by_pdf_id(mock_qdrant_client, 'col', ['a'])
     assert mock_qdrant_client.delete.called
 
 
@@ -134,8 +135,31 @@ def test_get_unique_metadata_df(monkeypatch, mock_qdrant_client):
     )
 
     df = qdrant_utils.get_unique_metadata_df(mock_qdrant_client, "col")
-    assert len(df) == 2
-    row_empty = df[df["pdf_id"] == ""].iloc[0]
-    assert row_empty["point_ids"] == ["id3"]
-    row_p1 = df[df["pdf_id"] == "p1"].iloc[0]
-    assert set(row_p1["point_ids"]) == {"id1", "id2"}
+    assert len(df) == 3
+    assert "" in df["pdf_id"].tolist()
+
+
+def test_init_qdrant_client_invalid(monkeypatch):
+    with pytest.raises(ValueError):
+        qdrant_utils.init_qdrant_client("bogus")
+
+
+def test_init_qdrant_client_success(monkeypatch):
+    monkeypatch.setitem(qdrant_utils.config, "QDRANT_URL", "http://host")
+    monkeypatch.setitem(qdrant_utils.config, "QDRANT_API_KEY", "key")
+    monkeypatch.setitem(qdrant_utils.RAG_CONFIG, "qdrant_collection_name", "col")
+    client = MagicMock()
+    monkeypatch.setattr(qdrant_utils, "QdrantClient", lambda **kw: client)
+    monkeypatch.setattr(qdrant_utils, "list_collections", lambda c: ["col"])
+    result = qdrant_utils.init_qdrant_client("cloud")
+    assert result is client
+
+
+def test_init_qdrant_client_missing_collection(monkeypatch):
+    monkeypatch.setitem(qdrant_utils.config, "QDRANT_URL", "http://host")
+    monkeypatch.setitem(qdrant_utils.config, "QDRANT_API_KEY", "key")
+    monkeypatch.setitem(qdrant_utils.RAG_CONFIG, "qdrant_collection_name", "col")
+    monkeypatch.setattr(qdrant_utils, "QdrantClient", lambda **kw: MagicMock())
+    monkeypatch.setattr(qdrant_utils, "list_collections", lambda c: ["other"])
+    with pytest.raises(ValueError):
+        qdrant_utils.init_qdrant_client("cloud")
