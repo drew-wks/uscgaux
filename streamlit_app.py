@@ -39,7 +39,7 @@ tabs = st.tabs([
     "3.Launch",
     "Admin Tools",
     "Library",
-    "DB Report",
+    "Qdrant Report",
 ])
 
 
