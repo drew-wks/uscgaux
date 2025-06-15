@@ -114,3 +114,28 @@ def test_get_gcp_file_ids_by_pdf_id(monkeypatch, mock_qdrant_client):
     assert df.loc[1, "gcp_file_ids"] == ["z"]
     assert df.loc[2, "pdf_id"] == "p3"
     assert df.loc[2, "gcp_file_ids"] == []
+
+
+def test_get_unique_metadata_df(monkeypatch, mock_qdrant_client):
+    rec1 = MagicMock()
+    rec1.id = "id1"
+    rec1.payload = {"metadata": {"pdf_id": "p1", "title": "t", "page_number": 0}}
+    rec2 = MagicMock()
+    rec2.id = "id2"
+    rec2.payload = {"metadata": {"pdf_id": "p1", "title": "t", "page_number": 1}}
+    rec3 = MagicMock()
+    rec3.id = "id3"
+    rec3.payload = {"metadata": {"title": "t2", "page_number": 0}}
+
+    monkeypatch.setattr(
+        mock_qdrant_client,
+        "scroll",
+        lambda **kwargs: ([rec1, rec2, rec3], None),
+    )
+
+    df = qdrant_utils.get_unique_metadata_df(mock_qdrant_client, "col")
+    assert len(df) == 2
+    row_empty = df[df["pdf_id"] == ""].iloc[0]
+    assert row_empty["point_ids"] == ["id3"]
+    row_p1 = df[df["pdf_id"] == "p1"].iloc[0]
+    assert set(row_p1["point_ids"]) == {"id1", "id2"}

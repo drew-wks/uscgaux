@@ -418,6 +418,68 @@ def get_gcp_file_ids_by_pdf_id(client: QdrantClient, collection_name: str, pdf_i
     return pd.DataFrame(rows)
 
 
+def get_unique_metadata_df(client: QdrantClient, collection_name: str) -> pd.DataFrame:
+    """Return dataframe of unique metadata across all records.
+
+    Each row corresponds to a unique set of metadata values with ``page_number``
+    removed. A ``point_ids`` column lists all record IDs that share that
+    metadata. Records lacking ``pdf_id`` are included with an empty string.
+
+    Args:
+        client: Initialized Qdrant client.
+        collection_name: Name of the Qdrant collection to scan.
+
+    Returns:
+        DataFrame where columns are metadata keys plus ``point_ids``.
+    """
+
+    metadata_map: dict[tuple, dict] = {}
+    scroll_offset = None
+    while True:
+        results, scroll_offset = client.scroll(
+            collection_name=collection_name,
+            scroll_filter=None,
+            with_payload=True,
+            with_vectors=False,
+            limit=100000,
+            offset=scroll_offset,
+        )
+
+        for rec in results:
+            payload = rec.payload
+            if not isinstance(payload, dict):
+                continue
+            meta = payload.get("metadata")
+            if not isinstance(meta, dict):
+                continue
+
+            meta = meta.copy()
+            meta.pop("page_number", None)
+            if meta.get("pdf_id") is None:
+                meta["pdf_id"] = ""
+
+            key = tuple(sorted(meta.items()))
+            if key not in metadata_map:
+                metadata_map[key] = {"metadata": meta, "point_ids": [rec.id]}
+            else:
+                metadata_map[key]["point_ids"].append(rec.id)
+
+        if scroll_offset is None:
+            break
+
+    if not metadata_map:
+        return pd.DataFrame()
+
+    all_keys = sorted({k for entry in metadata_map.values() for k in entry["metadata"].keys()})
+    rows: list[dict] = []
+    for entry in metadata_map.values():
+        row = {k: entry["metadata"].get(k) for k in all_keys}
+        row["point_ids"] = entry["point_ids"]
+        rows.append(row)
+
+    return pd.DataFrame(rows)
+
+
 def update_file_id_for_pdf_id(client: QdrantClient, collection_name: str, pdf_id: str, gcp_file_id: str) -> bool:
     """Update metadata.gcp_file_id for all points matching pdf_id."""
     try:
