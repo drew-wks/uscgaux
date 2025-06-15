@@ -6,7 +6,11 @@ st.set_page_config(page_title="ASK Auxiliary Source of Knowledge",
                    initial_sidebar_state="collapsed")
 from env_config import env_config, RAG_CONFIG
 from gcp_utils import get_gcp_credentials, init_sheets_client, init_drive_client
-from qdrant_utils import init_qdrant_client, get_unique_metadata_df
+from qdrant_utils import (
+    init_qdrant_client,
+    get_unique_metadata_df,
+    delete_records_by_pdf_id,
+)
 from gcp_utils import fetch_sheet_as_df
 from library_utils import validate_all_rows_format
 from propose_new_files import propose_new_files, FileLike
@@ -188,7 +192,22 @@ with tabs[5]:
     if metadata_df.empty:
         st.warning("⚠️ No data to display.")
     else:
-        st.data_editor(metadata_df, use_container_width=True, hide_index=False, disabled=True)
+        df = metadata_df.copy()
+        df["num_points"] = df["point_ids"].apply(lambda x: len(x) if isinstance(x, list) else 0)
+        gcp_col = "gcp_file_id" if "gcp_file_id" in df.columns else "gcp_id" if "gcp_id" in df.columns else None
+        order_cols = ["pdf_id"]
+        if gcp_col:
+            order_cols.append(gcp_col)
+        order_cols.append("num_points")
+        df = df[order_cols + [c for c in df.columns if c not in order_cols]]
+        df.insert(0, "selected", False)
+
+        edited = st.data_editor(df, use_container_width=True, hide_index=False)
+
+        selected = edited[edited["selected"]]
+        if st.button("Delete selected points", disabled=selected.empty):
+            delete_records_by_pdf_id(qdrant_client, collection, selected["pdf_id"])
+            st.success("Selected points deleted from Qdrant")
 
         try:
             csv_string = metadata_df.to_csv(index=False)
