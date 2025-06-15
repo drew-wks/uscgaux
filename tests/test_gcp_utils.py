@@ -2,6 +2,7 @@ import io
 import pandas as pd
 from unittest.mock import MagicMock
 from googleapiclient.errors import HttpError
+import pytest
 
 import gcp_utils
 
@@ -59,7 +60,7 @@ def test_fetch_sheet_as_df(monkeypatch, mock_sheets_client):
 
 
 
-def test_fetch_sheet_empty(mock_sheets_client):
+def test_fetch_sheet_empty_duplicate(mock_sheets_client):
     empty_sheet = MagicMock()
     empty_sheet.title = 'Empty'
     empty_sheet.get_all_values.return_value = []
@@ -86,3 +87,14 @@ def test_fetch_sheet_empty(mock_sheets_client):
 
     result = gcp_utils.fetch_sheet(mock_sheets_client, 'sheet_id')
     assert result is None
+
+def test_get_gcp_credentials_missing(monkeypatch):
+    monkeypatch.setitem(gcp_utils.config, "GCP_CREDENTIALS_FOR_STREAMLIT_USCGAUX_APP", "")
+    with pytest.raises(EnvironmentError):
+        gcp_utils.get_gcp_credentials()
+
+
+def test_get_gcp_credentials_bad_json(monkeypatch):
+    monkeypatch.setitem(gcp_utils.config, "GCP_CREDENTIALS_FOR_STREAMLIT_USCGAUX_APP", "{bad}")
+    with pytest.raises(ValueError):
+        gcp_utils.get_gcp_credentials()
