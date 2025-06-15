@@ -4,16 +4,16 @@ from typing import cast, List
 import streamlit as st
 st.set_page_config(page_title="ASK Auxiliary Source of Knowledge",
                    initial_sidebar_state="collapsed")
-from env_config import env_config
+from env_config import env_config, RAG_CONFIG
 from gcp_utils import get_gcp_credentials, init_sheets_client, init_drive_client
-from qdrant_utils import init_qdrant_client
+from qdrant_utils import init_qdrant_client, get_unique_metadata_df
 from gcp_utils import fetch_sheet_as_df
 from library_utils import validate_all_rows_format
 from propose_new_files import propose_new_files, FileLike
 from promote_files import promote_files
 from archive_delete_tagged import delete_tagged
 from status_map import build_status_map
-from ui_utils import init_auth, apply_styles, get_library_catalog_excel_and_date
+from ui_utils import init_auth, apply_styles
 
 
 config = env_config()
@@ -181,30 +181,22 @@ with tabs[4]:
 with tabs[5]:
     st.write("")
 
-    try:
-        qdrant_df, last_update_date = get_library_catalog_excel_and_date()
+    with st.spinner("Loading metadata from Qdrant..."):
+        collection = RAG_CONFIG["qdrant_collection_name"]
+        metadata_df = get_unique_metadata_df(qdrant_client, collection)
 
-        if qdrant_df is not None:
-            num_items_qdrant = len(qdrant_df)
-            st.markdown(f"**Qdrant DB:** {num_items_qdrant} items. Last update: {last_update_date}")
+    if metadata_df.empty:
+        st.warning("⚠️ No data to display.")
+    else:
+        st.data_editor(metadata_df, use_container_width=True, hide_index=False, disabled=True)
 
-            # Show read-only table
-            st.data_editor(qdrant_df, use_container_width=True, hide_index=False, disabled=True)
-
-            try:
-                csv_string = qdrant_df.to_csv(index=False)
-                b64 = base64.b64encode(csv_string.encode("utf-8")).decode("utf-8")
-                file_name = f'ASK_catalog_export{last_update_date}.csv'
-                download_link = f'<a href="data:file/csv;base64,{b64}" download="{file_name}">Click to download the catalog</a>'
-                st.markdown(download_link, unsafe_allow_html=True)
-
-            except (AttributeError, TypeError, UnicodeEncodeError) as e:
-                logging.exception("Error exporting catalog to CSV")
-                st.error("Something went wrong while preparing the download link.")
-        else:
-            st.warning("⚠️ No data to display or export.")
-
-    except (ValueError, TypeError) as e:
-        logging.exception("Error loading catalog data")
-        st.error("Could not load the catalog data. Please try again later.")
+        try:
+            csv_string = metadata_df.to_csv(index=False)
+            b64 = base64.b64encode(csv_string.encode("utf-8")).decode("utf-8")
+            file_name = "qdrant_metadata.csv"
+            link = f'<a href="data:file/csv;base64,{b64}" download="{file_name}">Download CSV</a>'
+            st.markdown(link, unsafe_allow_html=True)
+        except Exception:
+            logging.exception("Error exporting metadata to CSV")
+            st.error("Failed to prepare download link.")
 
