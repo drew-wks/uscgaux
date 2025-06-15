@@ -4,8 +4,8 @@ from typing import List, Tuple
 import pandas as pd
 
 from env_config import env_config, rag_config
-from gcp_utils import fetch_sheet_as_df, list_files_in_folder
-from qdrant_utils import (
+from utils.gcp_utils import fetch_sheet_as_df, list_files_in_folder
+from utils.qdrant_utils import (
     get_summaries_by_pdf_id,
     get_gcp_file_ids_by_pdf_id,
     get_all_pdf_ids_in_qdrant,
@@ -93,6 +93,7 @@ def build_status_map(drive_client, sheets_client, qdrant_client) -> Tuple[pd.Dat
     collection = rag_config("qdrant_collection_name")
     pdf_ids: List[str] = live_df["pdf_id"].dropna().tolist()
     qdrant_summary = get_summaries_by_pdf_id(qdrant_client, collection, pdf_ids)
+    qdrant_summary = qdrant_summary.copy()
     qdrant_summary.rename(columns={"pdf_file_name": "file_name"}, inplace=True)
     if not qdrant_summary.empty:
         qdrant_summary["in_qdrant"] = True
@@ -113,6 +114,7 @@ def build_status_map(drive_client, sheets_client, qdrant_client) -> Tuple[pd.Dat
     orphan_pdf_ids = sorted(all_pdf_ids - set(live_df["pdf_id"]))
     if orphan_pdf_ids:
         orphan_summary = get_summaries_by_pdf_id(qdrant_client, collection, orphan_pdf_ids)
+        orphan_summary = orphan_summary.copy()
         orphan_summary.rename(columns={"pdf_file_name": "file_name"}, inplace=True)
         if not orphan_summary.empty:
             orphan_summary["in_qdrant"] = True

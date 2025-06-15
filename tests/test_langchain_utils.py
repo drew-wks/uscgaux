@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 from langchain.schema import Document
 
-import langchain_utils
+import utils.langchain_utils as langchain_utils
 
 
 def test_init_vectorstore(monkeypatch):

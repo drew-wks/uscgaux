@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Optional, Dict, List, Union
 import pandas as pd
 from pypdf import PdfReader
-from gcp_utils import fetch_sheet_as_df  
+from utils.gcp_utils import fetch_sheet_as_df  
 
 
 def compute_pdf_id(pdf_bytes_io):

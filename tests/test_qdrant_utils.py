@@ -2,7 +2,7 @@ import pandas as pd
 from unittest.mock import MagicMock
 import pytest
 
-import qdrant_utils
+import utils.qdrant_utils as qdrant_utils
 
 
 def test_which_qdrant_local():

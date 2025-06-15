@@ -4,14 +4,14 @@ from gspread.client import Client as SheetsClient
 from googleapiclient.discovery import Resource as DriveClient
 from qdrant_client import QdrantClient
 from env_config import env_config, rag_config, RAG_CONFIG
-from gcp_utils import file_exists, move_file, fetch_sheet_as_df, fetch_sheet
-from library_utils import (
+from utils.gcp_utils import file_exists, move_file, fetch_sheet_as_df, fetch_sheet
+from utils.library_utils import (
     find_duplicates_against_reference,
     validate_all_rows_format,
     remove_rows,
 )
-from qdrant_utils import in_qdrant
-from langchain_utils import init_vectorstore, pdf_to_Docs_via_Drive, chunk_Docs
+from utils.qdrant_utils import in_qdrant
+from utils.langchain_utils import init_vectorstore, pdf_to_Docs_via_Drive, chunk_Docs
 from log_writer import log_event
 
 

@@ -2,7 +2,7 @@ import pandas as pd
 from typing import Iterable, Tuple, List, Dict, Any
 
 from env_config import env_config
-from gcp_utils import fetch_sheet
+from utils.gcp_utils import fetch_sheet
 
 config = env_config()
 

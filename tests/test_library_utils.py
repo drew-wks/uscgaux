@@ -2,7 +2,7 @@ import io
 import pandas as pd
 from pypdf import PdfWriter
 
-import library_utils
+import utils.library_utils as library_utils
 
 
 def test_compute_pdf_id():

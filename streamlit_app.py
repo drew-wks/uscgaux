@@ -12,12 +12,12 @@ st.set_page_config(
 )
 
 from env_config import env_config, RAG_CONFIG
-from gcp_utils import (
+from utils.gcp_utils import (
     get_gcp_credentials,
     init_sheets_client,
     init_drive_client,
 )
-from qdrant_utils import (
+from utils.qdrant_utils import (
     init_qdrant_client,
     get_all_pdf_ids_in_qdrant,
     get_summaries_by_pdf_id,
@@ -25,8 +25,8 @@ from qdrant_utils import (
     delete_records_by_pdf_id,
     get_unique_metadata_df,
 )
-from gcp_utils import fetch_sheet_as_df
-from library_utils import validate_all_rows_format
+from utils.gcp_utils import fetch_sheet_as_df
+from utils.library_utils import validate_all_rows_format
 from propose_new_files import propose_new_files, FileLike
 from promote_files import promote_files
 from archive_delete_tagged import delete_tagged

@@ -9,8 +9,8 @@ import requests
 import pandas as pd
 import streamlit as st 
 from streamlit_authenticator import Authenticate
-from gcp_utils import init_sheets_client, init_drive_client
-from qdrant_utils import init_qdrant_client
+from utils.gcp_utils import init_sheets_client, init_drive_client
+from utils.qdrant_utils import init_qdrant_client
 
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 

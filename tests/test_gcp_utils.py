@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 from googleapiclient.errors import HttpError
 import pytest
 
-import gcp_utils
+import utils.gcp_utils as gcp_utils
 
 
 def test_get_folder_name(mock_drive_client):

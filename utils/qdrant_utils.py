@@ -5,7 +5,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import exceptions as qdrant_exceptions
 from qdrant_client import models
 from env_config import env_config, RAG_CONFIG
-from gcp_utils import fetch_sheet_as_df
+from utils.gcp_utils import fetch_sheet_as_df
 
 
 def _validate_metadata(metadata: dict, require_file_id: bool = False) -> bool:
