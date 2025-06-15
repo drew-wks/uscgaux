@@ -143,17 +143,26 @@ def build_status_map(drive_client, sheets_client, qdrant_client) -> Tuple[pd.Dat
                 orphan_drive_df[col] = pd.NA
         status_df = pd.concat([status_df, orphan_drive_df[status_df.columns]], ignore_index=True)
 
-    status_df["in_qdrant"] = (
-    status_df["in_qdrant"].fillna(False).infer_objects(copy=False).astype("bool")
-)
-    status_df["in_drive"] = status_df["in_drive"].fillna(False).astype("bool")
-    status_df["in_qdrant"] = status_df["in_qdrant"].fillna(False).astype("bool")
-    status_df["record_count"] = status_df["record_count"].fillna(0).astype(int)
+    bool_cols = [
+        "in_sheet",
+        "empty_pdf_id_in_sheet",
+        "empty_gcp_file_id_in_sheet",
+        "duplicate_pdf_id_in_sheet",
+    ]
+    for col in bool_cols:
+        if col in status_df.columns:
+            status_df[col] = status_df[col].astype("boolean").fillna(False)
+
+    status_df["in_drive"] = status_df["in_drive"].astype("boolean").fillna(False)
+    status_df["in_qdrant"] = status_df["in_qdrant"].astype("boolean").fillna(False)
+    status_df["record_count"] = status_df["record_count"].astype("Int64").fillna(0)
 
     status_df["zero_record_count"] = status_df["in_qdrant"] & (status_df["record_count"] == 0)
 
     # Flag rows where Qdrant records exist but have no associated gcp_file_id
-    status_df["unique_file_count"] = status_df["unique_file_count"].fillna(0).astype(int)
+    status_df["unique_file_count"] = (
+        status_df["unique_file_count"].astype("Int64").fillna(0)
+    )
     status_df["empty_gcp_file_id_in_qdrant"] = status_df["in_qdrant"] & (status_df["unique_file_count"] == 0)
     status_df["missing_gcp_file_id"] = status_df["empty_gcp_file_id_in_sheet"] | status_df["empty_gcp_file_id_in_qdrant"]
 
