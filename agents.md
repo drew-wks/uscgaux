@@ -2,7 +2,7 @@
 Before running any code or tests, run the following:
 
 pip install -r requirements.txt
-pip install -r dev/requirements-dev.txt
+pip install -r requirements-dev.txt
 
 If you are in the workspace you may need to address this as:
 pip install -r /workspace/uscgaux/requirements-dev.txt
@@ -19,6 +19,10 @@ Do NOT Run `install.sh` this script, if it exists. This script will be executed 
 The 'install.sh' references dependencies gathered here: `requirements.txt` and `requirements-dev.txt`. 
 
 Note that the effects will not take place until the next task session. 
+
+streamlit_app.py is the "entrypoint file" for Streamlit. When this app runs on Streamlit Community Cloud, the working directory is always the root of this project. Streamlit requires paths to have forward slashesd to work in Streamlit Community Cloud.
+
+## Testing
 
 # Run pyright 
 After editing a function
