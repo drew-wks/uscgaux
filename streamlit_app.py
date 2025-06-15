@@ -19,18 +19,15 @@ from utils.gcp_utils import (
 )
 from utils.qdrant_utils import (
     init_qdrant_client,
-    get_all_pdf_ids_in_qdrant,
-    get_summaries_by_pdf_id,
-    get_gcp_file_ids_by_pdf_id,
-    delete_records_by_pdf_id,
     get_unique_metadata_df,
+    delete_records_by_pdf_id,
 )
 from utils.gcp_utils import fetch_sheet_as_df
 from utils.library_utils import validate_all_rows_format
 from propose_new_files import propose_new_files, FileLike
 from promote_files import promote_files
 from archive_delete_tagged import delete_tagged
-from status_map import build_status_map
+from cleanup_orphans import build_status_map
 from ui_utils import init_auth, apply_styles
 
 
