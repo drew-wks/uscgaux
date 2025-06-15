@@ -1,3 +1,6 @@
+# Contains path-specific commands. Keep in project root
+
+
 import os, logging
 from dotenv import load_dotenv, dotenv_values
 from pathlib import Path

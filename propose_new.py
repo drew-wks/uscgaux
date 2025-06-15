@@ -1,15 +1,3 @@
-# propose_new_files.py
-
-"""
-Agent: propose_new_files.py
-
-Triggered when user uploads new files  using the streamlit utility
-- Computes metadata (pdf_id, pdf_file_name, etc.)
-- Checks for duplicates in LIBRARY_UNIFIED
-- If unique, appends row to LIBRARY_UNIFIED with status 'new_for_tagging'
-- If duplicate, deletes file from PDF_TAGGING and logs event
-"""
-
 
 from datetime import datetime, timezone
 import logging
@@ -20,7 +8,7 @@ from googleapiclient.discovery import Resource as DriveClient
 from env_config import env_config
 from utils.library_utils import compute_pdf_id, find_duplicates_against_reference, validate_core_metadata_format, append_new_rows
 from utils.gcp_utils import is_pdf_file, upload_pdf, fetch_sheet_as_df
-from log_writer import log_event
+from utils.log_writer import log_event
 
 config = env_config()
 

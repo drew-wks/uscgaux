@@ -12,7 +12,7 @@ from utils.library_utils import (
 )
 from utils.qdrant_utils import in_qdrant
 from utils.langchain_utils import init_vectorstore, pdf_to_Docs_via_Drive, chunk_Docs
-from log_writer import log_event
+from utils.log_writer import log_event
 
 
 config = env_config()

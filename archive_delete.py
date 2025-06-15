@@ -16,7 +16,7 @@ from utils.gcp_utils import (
 )
 from utils.qdrant_utils import delete_records_by_pdf_id, in_qdrant
 from utils.library_utils import fetch_rows_by_status, remove_rows, append_new_rows
-from log_writer import log_event
+from utils.log_writer import log_event
 
 
 config = env_config()

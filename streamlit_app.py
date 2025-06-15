@@ -24,10 +24,10 @@ from utils.qdrant_utils import (
 )
 from utils.gcp_utils import fetch_sheet_as_df
 from utils.library_utils import validate_all_rows_format
-from propose_new_files import propose_new_files, FileLike
-from promote_files import promote_files
-from archive_delete_tagged import delete_tagged
-from cleanup_orphans import build_status_map
+from propose_new import propose_new_files, FileLike
+from promote import promote_files
+from archive_delete import delete_tagged
+from cleanup import build_status_map
 from ui_utils import init_auth, apply_styles
 
 

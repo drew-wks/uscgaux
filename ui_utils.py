@@ -1,9 +1,9 @@
+# Contains path-specific commands. Keep in project root
+
 import os
 from pathlib import Path
 from fnmatch import fnmatch
 import re
-from typing import Tuple
-import logging
 import datetime
 import requests
 import pandas as pd
