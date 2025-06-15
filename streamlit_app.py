@@ -23,6 +23,7 @@ from qdrant_utils import (
     get_summaries_by_pdf_id,
     get_gcp_file_ids_by_pdf_id,
     delete_records_by_pdf_id,
+    get_unique_metadata_df,
 )
 from gcp_utils import fetch_sheet_as_df
 from library_utils import validate_all_rows_format
@@ -44,33 +45,10 @@ qdrant_client = init_qdrant_client("cloud")
 
 
 @st.cache_data(show_spinner=False)
-def load_qdrant_report_df(client: QdrantClient, collection: str) -> pd.DataFrame:
-    """Return aggregated metadata and file info for Qdrant points."""
-    pdf_ids = get_all_pdf_ids_in_qdrant(client, collection)
-    if not pdf_ids:
-        return pd.DataFrame()
+def get_unique_metadata_df_cached(_client: QdrantClient, collection: str) -> pd.DataFrame:
+    return get_unique_metadata_df(_client, collection)
 
-    summary_df = get_summaries_by_pdf_id(client, collection, pdf_ids)
-    files_df = get_gcp_file_ids_by_pdf_id(client, collection, pdf_ids)
-    if summary_df.empty:
-        df = files_df
-    else:
-        df = summary_df.merge(files_df, on="pdf_id", how="left")
 
-    if "gcp_file_ids" in df.columns:
-        df["gcp_file_id"] = df["gcp_file_ids"].apply(
-            lambda ids: ids[0] if isinstance(ids, list) and ids else ""
-        )
-
-    if "point_ids" in df.columns:
-        df["num_points"] = df["point_ids"].apply(
-            lambda x: len(x) if isinstance(x, list) else 0
-        )
-    elif "record_count" in df.columns:
-        df["num_points"] = df["record_count"]
-    else:
-        df["num_points"] = 0
-    return df
 
 st.write("")
 st.write("")
@@ -230,7 +208,7 @@ with tabs[5]:
 
     with st.spinner("Loading metadata from Qdrant..."):
         collection = RAG_CONFIG["qdrant_collection_name"]
-        metadata_df = load_qdrant_report_df(qdrant_client, collection)
+        metadata_df = get_unique_metadata_df_cached(qdrant_client, collection)
 
     if metadata_df.empty:
         st.warning("⚠️ No data to display.")
@@ -240,8 +218,7 @@ with tabs[5]:
         order_cols = ["pdf_id"]
         if gcp_col:
             order_cols.append(gcp_col)
-        order_cols.append("num_points")
-        df = df[order_cols + [c for c in df.columns if c not in order_cols]]
+        df = df[[c for c in order_cols if c in df.columns] + [c for c in df.columns if c not in order_cols]]
         df.insert(0, "selected", False)
 
         edited = st.data_editor(df, use_container_width=True, hide_index=False)
@@ -254,7 +231,7 @@ with tabs[5]:
             delete_records_by_pdf_id(
                 qdrant_client, collection, list(selected["pdf_id"])
             )
-            load_qdrant_report_df.clear()  # pyright: ignore[reportFunctionMemberAccess]
+            get_unique_metadata_df_cached.clear()  # pyright: ignore[reportFunctionMemberAccess]
             st.success("Selected points deleted from Qdrant")
 
         try:

@@ -421,7 +421,7 @@ def get_gcp_file_ids_by_pdf_id(client: QdrantClient, collection_name: str, pdf_i
 def get_unique_metadata_df(client: QdrantClient, collection_name: str) -> pd.DataFrame:
     """Return dataframe of unique metadata across all records.
 
-    Each row corresponds to a unique set of metadata values with ``page_number``
+    Each row corresponds to a unique set of metadata values with ``page``
     removed. A ``point_ids`` column lists all record IDs that share that
     metadata. Records lacking ``pdf_id`` are included with an empty string.
 
@@ -454,7 +454,7 @@ def get_unique_metadata_df(client: QdrantClient, collection_name: str) -> pd.Dat
                 continue
 
             meta = meta.copy()
-            meta.pop("page_number", None)
+            meta.pop("page", None)
             if meta.get("pdf_id") is None:
                 meta["pdf_id"] = ""
 
