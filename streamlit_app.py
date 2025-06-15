@@ -26,8 +26,7 @@ from utils.gcp_utils import fetch_sheet_as_df
 from utils.library_utils import validate_all_rows_format
 from propose_new import propose_new, FileLike
 from promote import promote_files
-from archive import delete_tagged
-from cleanup import build_status_map
+from cleanup import build_status_map, delete_tagged
 from ui_utils import init_auth, apply_styles
 
 
