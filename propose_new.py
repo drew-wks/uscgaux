@@ -31,7 +31,7 @@ class FileLike(Protocol):
     name: str
     
     
-def propose_new_files(drive_client: DriveClient, sheets_client: SheetsClient, uploaded_files: List[FileLike]):
+def propose_new(drive_client: DriveClient, sheets_client: SheetsClient, uploaded_files: List[FileLike]):
     """
     Processes uploaded PDF files, checking for duplicates and appending metadata to the system.
 

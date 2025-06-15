@@ -7,7 +7,7 @@ from qdrant_client import QdrantClient
 
 from env_config import env_config, rag_config
 from utils.gcp_utils import fetch_sheet_as_df, list_files_in_folder, get_folder_name, file_exists
-from utils.library_utils import fetch_rows_by_status, remove_rows, 
+from utils.library_utils import fetch_rows_by_status, remove_rows
 from utils.log_writer import log_event
 from utils.qdrant_utils import (
     get_summaries_by_pdf_id,

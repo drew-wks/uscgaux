@@ -10,7 +10,7 @@ def make_file(name: str) -> io.BytesIO:
     return buf
 
 
-def test_propose_new_files_handles_duplicates(monkeypatch):
+def test_propose_new_handles_duplicates(monkeypatch):
     # fake config
     monkeypatch.setattr(propose_new, 'config', {'LIBRARY_UNIFIED': 'lib', 'PDF_TAGGING': 'tag'})
 
@@ -29,7 +29,7 @@ def test_propose_new_files_handles_duplicates(monkeypatch):
 
     dup = make_file('dup.pdf')
     new = make_file('new.pdf')
-    new_rows, failed, duplicates = propose_new.propose_new_files(MagicMock(), MagicMock(), [dup, new])
+    new_rows, failed, duplicates = propose_new.propose_new(MagicMock(), MagicMock(), [dup, new])
 
     assert duplicates == ['dup.pdf']
     assert failed == []
@@ -37,13 +37,13 @@ def test_propose_new_files_handles_duplicates(monkeypatch):
     assert 'duplicate_skipped' in events and 'new_pdf_to_PDF_TAGGING' in events
 
 
-def test_propose_new_files_handles_failures(monkeypatch):
+def test_propose_new_handles_failures(monkeypatch):
     monkeypatch.setattr(propose_new, 'config', {'LIBRARY_UNIFIED': 'lib', 'PDF_TAGGING': 'tag'})
     monkeypatch.setattr(propose_new, 'fetch_sheet_as_df', lambda *a, **kw: pd.DataFrame({'pdf_id': []}))
     monkeypatch.setattr(propose_new, 'compute_pdf_id', lambda f: None)
 
     file1 = make_file('bad.pdf')
-    new_rows, failed, duplicates = propose_new.propose_new_files(MagicMock(), MagicMock(), [file1])
+    new_rows, failed, duplicates = propose_new.propose_new(MagicMock(), MagicMock(), [file1])
 
     assert new_rows.empty
     assert failed == ['bad.pdf']
