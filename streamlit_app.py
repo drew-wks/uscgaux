@@ -1,14 +1,27 @@
 import base64
 import logging
 from typing import cast, List
+
+import pandas as pd
 import streamlit as st
-st.set_page_config(page_title="ASK Auxiliary Source of Knowledge",
-                   initial_sidebar_state="collapsed")
+from qdrant_client import QdrantClient
+
+st.set_page_config(
+    page_title="ASK Auxiliary Source of Knowledge",
+    initial_sidebar_state="collapsed",
+)
+
 from env_config import env_config, RAG_CONFIG
-from gcp_utils import get_gcp_credentials, init_sheets_client, init_drive_client
+from gcp_utils import (
+    get_gcp_credentials,
+    init_sheets_client,
+    init_drive_client,
+)
 from qdrant_utils import (
     init_qdrant_client,
-    get_unique_metadata_df,
+    get_all_pdf_ids_in_qdrant,
+    get_summaries_by_pdf_id,
+    get_gcp_file_ids_by_pdf_id,
     delete_records_by_pdf_id,
 )
 from gcp_utils import fetch_sheet_as_df
@@ -28,6 +41,36 @@ creds = get_gcp_credentials()
 sheets_client = init_sheets_client(creds)
 drive_client = init_drive_client(creds)
 qdrant_client = init_qdrant_client("cloud")
+
+
+@st.cache_data(show_spinner=False)
+def load_qdrant_report_df(client: QdrantClient, collection: str) -> pd.DataFrame:
+    """Return aggregated metadata and file info for Qdrant points."""
+    pdf_ids = get_all_pdf_ids_in_qdrant(client, collection)
+    if not pdf_ids:
+        return pd.DataFrame()
+
+    summary_df = get_summaries_by_pdf_id(client, collection, pdf_ids)
+    files_df = get_gcp_file_ids_by_pdf_id(client, collection, pdf_ids)
+    if summary_df.empty:
+        df = files_df
+    else:
+        df = summary_df.merge(files_df, on="pdf_id", how="left")
+
+    if "gcp_file_ids" in df.columns:
+        df["gcp_file_id"] = df["gcp_file_ids"].apply(
+            lambda ids: ids[0] if isinstance(ids, list) and ids else ""
+        )
+
+    if "point_ids" in df.columns:
+        df["num_points"] = df["point_ids"].apply(
+            lambda x: len(x) if isinstance(x, list) else 0
+        )
+    elif "record_count" in df.columns:
+        df["num_points"] = df["record_count"]
+    else:
+        df["num_points"] = 0
+    return df
 
 st.write("")
 st.write("")
@@ -187,13 +230,12 @@ with tabs[5]:
 
     with st.spinner("Loading metadata from Qdrant..."):
         collection = RAG_CONFIG["qdrant_collection_name"]
-        metadata_df = get_unique_metadata_df(qdrant_client, collection)
+        metadata_df = load_qdrant_report_df(qdrant_client, collection)
 
     if metadata_df.empty:
         st.warning("⚠️ No data to display.")
     else:
         df = metadata_df.copy()
-        df["num_points"] = df["point_ids"].apply(lambda x: len(x) if isinstance(x, list) else 0)
         gcp_col = "gcp_file_id" if "gcp_file_id" in df.columns else "gcp_id" if "gcp_id" in df.columns else None
         order_cols = ["pdf_id"]
         if gcp_col:
@@ -205,8 +247,14 @@ with tabs[5]:
         edited = st.data_editor(df, use_container_width=True, hide_index=False)
 
         selected = edited[edited["selected"]]
-        if st.button("Delete selected points", disabled=selected.empty):
-            delete_records_by_pdf_id(qdrant_client, collection, selected["pdf_id"])
+        if st.button(
+            "Delete selected points",
+            disabled=selected.empty,  # pyright: ignore[reportAttributeAccessIssue]
+        ):
+            delete_records_by_pdf_id(
+                qdrant_client, collection, list(selected["pdf_id"])
+            )
+            load_qdrant_report_df.clear()  # pyright: ignore[reportFunctionMemberAccess]
             st.success("Selected points deleted from Qdrant")
 
         try:
